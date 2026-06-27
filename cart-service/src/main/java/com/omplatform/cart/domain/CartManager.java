@@ -1,5 +1,6 @@
 package com.omplatform.cart.domain;
 
+import com.omplatform.cart.config.CartIdBloomFilter;
 import com.omplatform.cart.event.CartEventPublisher;
 import com.omplatform.cart.repository.CartSyncOutboxRepository;
 import com.omplatform.cart.repository.entity.CartEntity;
@@ -17,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 购物车领域管理器（ADR-044）。
@@ -37,15 +39,19 @@ public class CartManager {
     private CartEventPublisher eventPublisher;
     @Autowired
     private CartSyncOutboxRepository syncOutboxRepository;
+    @Autowired
+    private CartIdBloomFilter cartIdBloomFilter;
 
     public CartManager(CartMapper cartMapper, CartItemMapper cartItemMapper,
                        CartRedisRepository cartRedis, CartEventPublisher eventPublisher,
-                       CartSyncOutboxRepository syncOutboxRepository) {
+                       CartSyncOutboxRepository syncOutboxRepository,
+                       CartIdBloomFilter cartIdBloomFilter) {
         this.cartMapper = cartMapper;
         this.cartItemMapper = cartItemMapper;
         this.cartRedis = cartRedis;
         this.eventPublisher = eventPublisher;
         this.syncOutboxRepository = syncOutboxRepository;
+        this.cartIdBloomFilter = cartIdBloomFilter;
     }
 
     // ========== 获取/创建购物车 ==========
@@ -82,6 +88,8 @@ public class CartManager {
         LocalDateTime expiredAt = userId != null ? null : LocalDateTime.now().plusDays(30);
         CartEntity entity = new CartEntity(cartId, userId, deviceId, "ACTIVE", 0, expiredAt);
         cartMapper.insert(entity);
+        // 新 cartId 加入布隆过滤器，后续读取可穿透防护
+        cartIdBloomFilter.put(cartId);
         log.info("创建购物车: cartId={}, userId={}, deviceId={}", cartId, userId, deviceId);
         return cartId;
     }
@@ -161,20 +169,50 @@ public class CartManager {
 
     /** 获取购物车列表（读修复：Redis 空时从 DB 恢复）。 */
     public List<CartItemEntity> listItems(String cartId) {
+        // 布隆过滤器：一定不存在的 cartId 直接拦截（缓存穿透防护）
+        if (!cartIdBloomFilter.mightExist(cartId)) {
+            return List.of();
+        }
+
+        // 缓存穿透防护：空值标记直接返回空
+        if (cartRedis.hasNullMarker(cartId)) {
+            return List.of();
+        }
+
         List<CartItemEntity> items = cartRedis.getAllItems(cartId);
         if (items.isEmpty()) {
-            repairFromDb(cartId);
+            // 缓存雪崩防护：随机延迟 0-300ms，避免大量重建同时打 DB
+            randomDelay();
+            // 双重检查：延迟期间可能已被其他请求恢复
             items = cartRedis.getAllItems(cartId);
+            if (items.isEmpty()) {
+                repairFromDb(cartId);
+                items = cartRedis.getAllItems(cartId);
+            }
         }
         return items;
     }
 
     /** 获取勾选商品（读修复：Redis 空时从 DB 恢复）。 */
     public List<CartItemEntity> getCheckedItems(String cartId) {
+        // 布隆过滤器拦截
+        if (!cartIdBloomFilter.mightExist(cartId)) {
+            return List.of();
+        }
+
+        // 缓存穿透防护
+        if (cartRedis.hasNullMarker(cartId)) {
+            return List.of();
+        }
+
         List<CartItemEntity> items = cartRedis.getCheckedItems(cartId);
         if (items.isEmpty()) {
-            repairFromDb(cartId);
+            randomDelay();
             items = cartRedis.getCheckedItems(cartId);
+            if (items.isEmpty()) {
+                repairFromDb(cartId);
+                items = cartRedis.getCheckedItems(cartId);
+            }
         }
         return items;
     }
@@ -317,6 +355,16 @@ public class CartManager {
      * 重新从 DB 加载并写入 Redis，保证最终一致性。
      */
     public void repairFromDb(String cartId) {
+        // 先检查购物车是否存在且有效（穿透防护：不存在的 cartId 或非 ACTIVE 状态设空值标记）
+        CartEntity cart = cartMapper.selectById(cartId);
+        if (cart == null || !"ACTIVE".equals(cart.getStatus())) {
+            cartRedis.setNullMarker(cartId, 15);
+            log.warn("Read-repair: cartId={} 不存在或状态非 ACTIVE(status={})，设置空值标记 15s",
+                    cartId, cart != null ? cart.getStatus() : "null");
+            return;
+        }
+        cartRedis.removeNullMarker(cartId);
+
         // 清空 Redis 当前数据，避免残留旧数据（如已删除的商品）
         cartRedis.clearCart(cartId);
         // 从 DB 全量读取（@TableLogic 自动过滤已删除记录）
@@ -335,9 +383,27 @@ public class CartManager {
     // ========== 辅助方法 ==========
 
     /**
+     * 缓存雪崩防护：随机休眠 0-300ms，避免大量读修复同时打 DB。
+     */
+    private void randomDelay() {
+        long millis = ThreadLocalRandom.current().nextLong(0, 300);
+        if (millis > 0) {
+            try {
+                Thread.sleep(millis);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /**
      * 写入 Redis 同步发件箱（与业务数据在同一 DB 事务中）。
+     * 同时清除空值标记，确保后续读取能拿到最新数据。
      */
     private void writeSyncOutbox(String cartId) {
+        // 缓存穿透防护：有数据写入时清除空值标记
+        cartRedis.removeNullMarker(cartId);
+
         CartSyncOutboxEntity record = new CartSyncOutboxEntity(
                 UUID.randomUUID().toString().replace("-", ""),
                 cartId,

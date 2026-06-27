@@ -1,5 +1,6 @@
 package com.omplatform.cart.domain;
 
+import com.omplatform.cart.config.CartIdBloomFilter;
 import com.omplatform.cart.event.CartEventPublisher;
 import com.omplatform.cart.repository.CartSyncOutboxRepository;
 import com.omplatform.cart.repository.entity.CartEntity;
@@ -37,13 +38,18 @@ class CartManagerTest {
     private CartEventPublisher eventPublisher;
     @Mock
     private CartSyncOutboxRepository syncOutboxRepository;
+    @Mock
+    private CartIdBloomFilter cartIdBloomFilter;
 
     private CartManager cartManager;
 
     @BeforeEach
     void setUp() {
+        // BloomFilter 默认放行所有 cartId（具体穿透逻辑由独立测试覆盖）
+        lenient().when(cartIdBloomFilter.mightExist(anyString())).thenReturn(true);
+
         cartManager = new CartManager(cartMapper, cartItemMapper, cartRedis, eventPublisher,
-                syncOutboxRepository);
+                syncOutboxRepository, cartIdBloomFilter);
     }
 
     @Test

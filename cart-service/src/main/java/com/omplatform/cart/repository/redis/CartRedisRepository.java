@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +28,8 @@ public class CartRedisRepository {
     private static final String KEY_ITEMS = "cart:%s:items";
     private static final String KEY_SORTED = "cart:%s:sorted_set";
     private static final String KEY_ANON_IDX = "cart:anon:%s";
+    /** 空值标记（缓存穿透防护），TTL 15s */
+    private static final String KEY_NULL = "cart:%s:null";
 
     @Autowired
     private StringRedisTemplate redis;
@@ -177,6 +180,28 @@ public class CartRedisRepository {
         String sortedKey = key(KEY_SORTED, cartId);
         redis.delete(itemsKey);
         redis.delete(sortedKey);
+    }
+
+    // ========== 缓存空值标记（穿透防护） ==========
+
+    /**
+     * 检查空值标记是否存在。
+     * <p>
+     * 若存在，说明该 cartId 对应的购物车在 DB 中也不存在，
+     * 直接返回空，避免穿透到 DB。
+     */
+    public boolean hasNullMarker(String cartId) {
+        return Boolean.TRUE.equals(redis.hasKey(key(KEY_NULL, cartId)));
+    }
+
+    /** 设置空值标记（过期自动清除）。 */
+    public void setNullMarker(String cartId, long ttlSeconds) {
+        redis.opsForValue().set(key(KEY_NULL, cartId), "1", ttlSeconds, TimeUnit.SECONDS);
+    }
+
+    /** 清除空值标记（有数据写入时调用）。 */
+    public void removeNullMarker(String cartId) {
+        redis.delete(key(KEY_NULL, cartId));
     }
 
     // ========== 辅助方法 ==========
