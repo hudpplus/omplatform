@@ -1,0 +1,185 @@
+@startuml 订单事件中心发布与消费流程
+!include <C4/C4_Container>
+!include <C4/C4_Context>
+
+skinparam component {
+    BackgroundColor #FEFEFE
+    BorderColor #555555
+}
+
+skinparam participant {
+    BackgroundColor #FEFEFE
+    BorderColor #555555
+}
+
+' Colors
+!define SERVICE_COLOR #E8F5E9
+!define MQ_COLOR #FFF3E0
+!define DB_COLOR #E3F2FD
+!define EXT_COLOR #FCE4EC
+
+title 订单事件中心 — 事件发布与消费流程
+
+' ========== 参与者 ==========
+
+actor "OrderService" as OrderService #SERVICE_COLOR
+participant "EventPublisher\n(EventPublisherImpl)" as EventPublisher #SERVICE_COLOR
+collections "RocketMQ\nORDER_EVENT" as MQ #MQ_COLOR
+database "事件存储\n(event_store)" as EventStore #DB_COLOR
+participant "EventRouter\n(事件路由器)" as EventRouter #SERVICE_COLOR
+participant "EventDeliveryLog\n(delivery_log)" as DeliveryLog #DB_COLOR
+
+' ========== 消费者 ==========
+participant "物流消费者\n(logistics-consumer)" as LogisticsConsumer #SERVICE_COLOR
+participant "积分消费者\n(points-consumer)" as PointsConsumer #SERVICE_COLOR
+participant "营销消费者\n(marketing-consumer)" as MarketingConsumer #SERVICE_COLOR
+participant "Webhook投递\n(webhook-dispatcher)" as WebhookDispatcher #SERVICE_COLOR
+actor "外部系统\n(第三方回调URL)" as ExternalSystem #EXT_COLOR
+
+' ========== 第 1 阶段：事件发布 ==========
+
+== 阶段 1：事务消息事件发布 ==
+
+OrderService -> EventPublisher: publish(orderPaidEvent)
+activate EventPublisher
+
+EventPublisher -> EventPublisher: ① 生成 eventId (UUID)
+EventPublisher -> EventPublisher: ② 填充元数据\n(source/timestamp/traceId)
+EventPublisher -> EventStore: ③ 写入 event_store\n(status=PENDING)
+activate EventStore
+EventStore --> EventPublisher: OK
+deactivate EventStore
+
+EventPublisher -> MQ: ④ 发送 RocketMQ 事务半消息
+activate MQ
+MQ --> EventPublisher: 半消息发送成功
+
+EventPublisher -> OrderService: ⑤ 执行本地事务\n（更新订单状态等）
+OrderService --> EventPublisher: 本地事务成功
+
+EventPublisher -> MQ: ⑥ 提交半消息 → 消费者可见
+deactivate MQ
+
+EventPublisher -> EventStore: ⑦ 更新 event_store\n(status=PUBLISHED)
+activate EventStore
+EventStore --> EventPublisher: OK
+deactivate EventStore
+
+deactivate EventPublisher
+
+note right #FEFEFE
+  事务消息确保：
+  事件不丢失 = 半消息先到 MQ
+  事件不早于业务 = 本地事务成功后才提交
+  事务回查 = Broker 回调 checkLocalTransaction
+end note
+
+' ========== 第 2 阶段：事件路由与消费 ==========
+
+== 阶段 2：事件路由与消费 ==
+
+MQ -> EventRouter: 消费 ORDER_EVENT 消息
+activate EventRouter
+
+EventRouter -> EventRouter: ① 解析消息 Header\n(eventType/bizScope/source)
+EventRouter -> EventRouter: ② 查询 event_subscription\n匹配订阅规则
+EventRouter -> EventRouter: ③ 通配匹配 + 业务线过滤\n+ SpEL条件过滤
+
+' ====== 并行分发给多个消费者 ======
+
+' --- 物流消费者 ---
+EventRouter -> LogisticsConsumer: ④ 分发给匹配的消费者
+activate LogisticsConsumer
+LogisticsConsumer -> LogisticsConsumer: 处理物流单创建
+LogisticsConsumer -> DeliveryLog: 记录 SUCCESS
+activate DeliveryLog
+DeliveryLog --> LogisticsConsumer: OK
+deactivate DeliveryLog
+LogisticsConsumer --> EventRouter: 消费完成
+deactivate LogisticsConsumer
+
+' --- 积分消费者 ---
+EventRouter -> PointsConsumer: ④ 分发给积分消费者
+activate PointsConsumer
+PointsConsumer -> PointsConsumer: 处理积分赠送
+PointsConsumer -> DeliveryLog: 记录 SUCCESS
+activate DeliveryLog
+DeliveryLog --> PointsConsumer: OK
+deactivate DeliveryLog
+PointsConsumer --> EventRouter: 消费完成
+deactivate PointsConsumer
+
+' --- 营销消费者 ---
+EventRouter -> MarketingConsumer: ④ 分发给营销消费者
+activate MarketingConsumer
+MarketingConsumer -> MarketingConsumer: 更新营销数据
+MarketingConsumer -> DeliveryLog: 记录 SUCCESS
+activate DeliveryLog
+DeliveryLog --> MarketingConsumer: OK
+deactivate DeliveryLog
+MarketingConsumer --> EventRouter: 消费完成
+deactivate MarketingConsumer
+
+' --- Webhook 投递 ---
+EventRouter -> WebhookDispatcher: ④ 分发给 Webhook 投递
+activate WebhookDispatcher
+
+WebhookDispatcher -> WebhookDispatcher: 查询 event_subscription\n(notify_url 非空)
+WebhookDispatcher -> WebhookDispatcher: HMAC-SHA256 签名
+WebhookDispatcher -> ExternalSystem: HTTP POST 事件回调
+activate ExternalSystem
+
+alt 2xx 成功
+    ExternalSystem --> WebhookDispatcher: 200 OK
+    WebhookDispatcher -> DeliveryLog: 记录 SUCCESS
+else 非 2xx 或超时
+    ExternalSystem --> WebhookDispatcher: 5xx / 超时
+    WebhookDispatcher -> WebhookDispatcher: 指数退避重试\n(1s→2s→4s→...→8m)
+
+    alt 重试成功
+        ExternalSystem --> WebhookDispatcher: 200 OK
+        WebhookDispatcher -> DeliveryLog: 记录 SUCCESS (attempt=N)
+    else 超过最大重试次数
+        WebhookDispatcher -> MQ: 投递 DLQ (死信队列)
+        WebhookDispatcher -> DeliveryLog: 记录 DLQ
+        MQ -> Monitor: DLQ 深度 > 100 → P1 告警
+    end
+end
+
+deactivate ExternalSystem
+WebhookDispatcher --> EventRouter: 投递完成
+deactivate WebhookDispatcher
+
+deactivate EventRouter
+
+note right #FEFEFE
+  Webhook 使用 ADR-033 的投递引擎：
+  - HMAC-SHA256 签名验证
+  - 指数退避 1s→2s→4s→...→8m
+  - 最多 10 次重试
+  - DLQ 兜底 + 告警
+end note
+
+' ========== 第 3 阶段：可观测性 ==========
+
+== 阶段 3：可观测性采集 ==
+
+Participant "Prometheus\n(指标聚合)" as Prometheus #DB_COLOR
+Participant "Grafana\n(集成健康大盘)" as Grafana #DB_COLOR
+
+EventPublisher -> Prometheus: omplatform_integration_event_published_total\n{event_type="order.paid", status="success"}
+LogisticsConsumer -> Prometheus: omplatform_integration_event_consumed_total\n{consumer_group="logistics", status="success"}
+LogisticsConsumer -> Prometheus: omplatform_integration_event_consume_duration\n{consumer_group="logistics"}
+MQ -> Prometheus: omplatform_integration_event_backlog\n{consumer_group="logistics"}
+
+Prometheus -> Grafana: 聚合指标
+Grafana -> Grafana: 集成健康大盘渲染\n(总览看板 / API 看板 / 事件看板)
+
+note right #FEFEFE
+  集成可观测性 3 个看板：
+  ① 集成总览 — 全局健康评分 + Top 趋势
+  ② API 详情 — 按 AppKey 维度 QPS/延迟/错误率
+  ③ 事件详情 — 按事件类型/消费者组维度堆积/延迟
+end note
+
+@enduml

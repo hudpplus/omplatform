@@ -1,0 +1,134 @@
+// =====================================================================
+// 方案三：Seata AT（自动补偿模式）
+// =====================================================================
+// 核心思想：Seata 框架自动解析 SQL 前后镜像，生成 undo_log
+//           业务零侵入——只需一行 @GlobalTransactional
+// 适用场景：纯数据库操作、不想写补偿代码、有 Seata TC 集群
+// 当前项目：不使用——引入 Seata TC 额外中间件，且不覆盖 Redis/RocketMQ
+// =====================================================================
+
+// ---------- pom.xml 依赖 ----------
+/*
+<!-- Seata Spring Boot Starter -->
+<dependency>
+    <groupId>com.alibaba.cloud</groupId>
+    <artifactId>spring-cloud-starter-alibaba-seata</artifactId>
+</dependency>
+
+<!-- Seata 与 Spring Boot 3.x 兼容（需自行选版） -->
+<dependency>
+    <groupId>io.seata</groupId>
+    <artifactId>seata-spring-boot-starter</artifactId>
+    <version>2.2.0</version>
+</dependency>
+*/
+
+import com.omplatform.common.api.ApiResult;
+import com.omplatform.trade.repository.OrderRepository;
+import com.omplatform.trade.repository.entity.OrderEntity;
+import com.omplatform.trade.statemachine.OrderStatus;
+import io.seata.core.context.RootContext;
+import io.seata.rm.datasource.DataSourceProxy;
+import io.seata.spring.annotation.GlobalTransactional;
+import io.seata.tm.api.GlobalTransaction;
+import io.seata.tm.api.GlobalTransactionContext;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import javax.sql.DataSource;
+import java.math.BigDecimal;
+
+// ==================== 配置层 ====================
+
+/**
+ * Seata AT 配置 —— 将普通 DataSource 包装为 Seata DataSourceProxy。
+ *
+ * 核心原理：
+ *   1. DataSourceProxy 拦截所有 SQL 执行
+ *   2. 在执行 UPDATE/INSERT/DELETE 前，记录前镜像（before image）
+ *   3. 执行 SQL 后，记录后镜像（after image）
+ *   4. 将 before/after image 写入 undo_log 表
+ *   5. GlobalTransaction 决定 commit → 删除 undo_log
+ *              或 rollback → 用 undo_log 反向 SQL 回滚
+ */
+@Slf4j
+@Configuration
+@ConditionalOnProperty(name = "seata.enabled", havingValue = "true")
+public class SeataDataSourceConfig {
+
+    /**
+     * 将 oms_trade 的 DataSource 代理为 Seata 可管理的数据源。
+     * 这一步是关键：没有 proxy，Seata 无法拦截 SQL。
+     */
+    @Bean("seataTradeDataSource")
+    public DataSource seataTradeDataSource(DataSource tradeDataSource) {
+        return new DataSourceProxy(tradeDataSource);
+    }
+}
+
+// ---------- application.yml 配置 ----------
+/*
+seata:
+  enabled: true
+  application-id: oms-trade
+  tx-service-group: omplatform_tx_group
+  service:
+    vgroup-mapping:
+      omplatform_tx_group: default
+    grouplist:
+      default: 127.0.0.1:8091  # Seata TC 地址
+  config:
+    type: nacos
+    nacos:
+      server-addr: 127.0.0.1:8848
+      namespace: public
+      group: SEATA_GROUP
+  registry:
+    type: nacos
+    nacos:
+      server-addr: 127.0.0.1:8848
+      namespace: public
+      group: SEATA_GROUP
+      application: seata-server
+*/
+
+// ---------- undo_log 表 DDL ----------
+/*
+ * Seata AT 模式要求每个数据库都有一张 undo_log 表：
+ *
+ * -- oms_trade.undo_log
+ * -- oms_fulfillment.undo_log
+ * -- oms_finance.undo_log
+ *
+ * CREATE TABLE IF NOT EXISTS `undo_log` (
+ *   `id`            BIGINT(20)   NOT NULL AUTO_INCREMENT,
+ *   `branch_id`     BIGINT(20)   NOT NULL,
+ *   `xid`           VARCHAR(128) NOT NULL,
+ *   `context`       VARCHAR(128) NOT NULL,
+ *   `rollback_info` LONGBLOB     NOT NULL,
+ *   `log_status`    INT(11)      NOT NULL,
+ *   `log_created`   DATETIME     NOT NULL,
+ *   `log_modified`  DATETIME     NOT NULL,
+ *   `ext`           VARCHAR(100) DEFAULT NULL,
+ *   PRIMARY KEY (`id`),
+ *   UNIQUE KEY `ux_undo_log` (`xid`, `branch_id`)
+ * ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4;
+ */
+
+// ==================== Seata AT 核心机制说明 ====================
+
+/**
+ * Seata AT 的三阶段模型（非标准 XA，而是模拟的两阶段）：
+ *
+ *   ┌────────────────────────────────────────────────────────────────────┐
+ *   │  Phase 1: 执行业务 SQL + 自动记录 undo_log                        │
+ *   │                                                                   │
+ *   │  @GlobalTransactional                                             │
+ *   │  public void createOrder() {                                      │
+ *  ... (file continues; original example saved as resource for reference)
+

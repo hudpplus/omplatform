@@ -1,0 +1,77 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: igw
+  cloud:
+    gateway:
+      observability:
+        enabled: true
+      routes:
+        # ====== oms-trade 路由 ======
+        - id: trade-buyer
+          uri: lb://oms-trade
+          predicates:
+            - Path=/api/v1/orders/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                key-resolver: "#{@userKeyResolver}"
+                redis-rate-limiter:
+                  replenishRate: 100
+                  burstCapacity: 200
+        - id: trade-admin
+          uri: lb://oms-trade
+          predicates:
+            - Path=/api/admin/v1/orders/**
+        # ====== cart-service 路由 ======
+        - id: cart
+          uri: lb://cart-service
+          predicates:
+            - Path=/api/v1/cart/**
+        # ====== oms-finance 路由 ======
+        - id: finance
+          uri: lb://oms-finance
+          predicates:
+            - Path=/api/v1/payments/**,/api/v1/aftersales/**
+        # ====== oms-marketing 路由 ======
+        - id: marketing
+          uri: lb://oms-marketing
+          predicates:
+            - Path=/api/v1/marketing/**,/api/v1/members/**
+
+    sentinel:
+      transport:
+        dashboard: localhost:8088
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 3000ms
+
+  main:
+    web-application-type: reactive
+
+dubbo:
+  application:
+    name: igw
+  registry:
+    address: nacos://localhost:8848
+
+nacos:
+  discovery:
+    server-addr: localhost:8848
+
+# 链路追踪
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  level:
+    com.omplatform: DEBUG
+  pattern:
+    level: "%5p [%X{traceId:-} %X{spanId:-}]"

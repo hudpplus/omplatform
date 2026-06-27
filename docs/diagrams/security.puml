@@ -1,0 +1,76 @@
+@startuml
+title 安全架构五层防御体系
+
+skinparam packageStyle rectangle
+
+' ===== Layer 1: 传输层加密 =====
+package "Layer 1: 传输层加密" as L1 #LightBlue {
+    rectangle "客户端 ↔ IGW / EGW\nHTTPS TLS 1.3" as tls1
+    rectangle "服务间 ↔ Dubbo mTLS\n双向证书 + 自动轮换" as tls2
+    rectangle "Redis / RocketMQ / ES / OB\nSSL/TLS 加密通道" as tls3
+}
+
+' ===== Layer 2: 认证与授权层 =====
+package "Layer 2: 认证与授权层" as L2 #LightGreen {
+    rectangle "Internal Gateway: JWT 鉴权\nIGW Buyer / IGW Admin 双实例" as app1a
+    rectangle "External Gateway: HMAC-SHA256 签名\nAppKey 认证" as app1b
+    rectangle "Spring Security: OAuth2\nRBAC 角色权限" as app2
+    rectangle "@Desensitize 脱敏注解\n@AuditLog 审计注解" as app3
+    rectangle "ShardingSphere: Encrypt 透明加密\nMask 查询脱敏" as app4
+}
+
+' ===== Layer 3: 限流与熔断层 =====
+package "Layer 3: 限流与熔断层" as L3 #LightPink {
+    rectangle "IGW: Sentinel 限流 + 熔断\nQPS / 并发线程限流" as rate1
+    rectangle "EGW: Redis 令牌桶限流\n应用级日配额管理" as rate2
+    rectangle "服务级熔断: 慢调用 / 异常比例\nSentinel HALF_OPEN 自动恢复" as rate3
+}
+
+' ===== Layer 4: 存储层加密 =====
+package "Layer 4: 存储层加密" as L4 #LightYellow {
+    rectangle "OceanBase TDE\n表空间级透明加密" as store1
+    rectangle "AES-256 字段级加密\n身份证 / 银行卡号" as store2
+    rectangle "Vault 密钥管理\n90 天自动轮转" as store3
+}
+
+' ===== Layer 5: 审计与合规 =====
+package "Layer 5: 审计与合规" as L5 #LightCoral {
+    rectangle "审计日志链式哈希防篡改\nSHA-256 完整性校验" as audit1
+    rectangle "数据生命周期分级管理\n热(OB)→温(ES)→冷(OSS Parquet)→销毁(3 步安全删除)" as audit2
+    rectangle "等保三级 6 域映射\n物理/网络/主机/应用/数据/管理" as audit3
+}
+
+' === 层间关系 ===
+L1 --> L2: 解密后的认证请求
+L2 --> L3: 通过认证的流量
+L3 --> L4: 数据落盘加密
+L4 --> L5: 合规审计覆盖
+
+' === 跨层标注 ===
+note right of L1
+    传输层加密覆盖所有通信链路
+    外部 HTTPS / 内部 mTLS / 中间件 TLS
+end note
+
+note right of L2
+    认证与授权：身份 → 权限 → 脱敏 → 加密
+    多层检查，纵深防御
+end note
+
+note right of L3
+    IGW 限流熔断详见 ADR-029（Sentinel 规则）
+    EGW 配额管理详见 ADR-025（令牌桶 + 日配额）
+    限流拒绝返回 4xxx 系列错误码
+end note
+
+note right of L4
+    存储层加密即使存储介质被盗
+    数据也无法解密
+end note
+
+note right of L5
+    审计日志不可篡改
+    满足等保三级 + 个保法合规
+end note
+
+@enduml

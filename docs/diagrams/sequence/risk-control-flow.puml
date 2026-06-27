@@ -1,0 +1,84 @@
+@startuml
+title 风控集成流程 (Risk Control Integration Flow)
+
+actor User as "买家"
+participant OrderCore as "order-core"
+participant RiskPreCheck as "RiskPreCheckInterceptor"
+participant Redis as "Redis(黑白名单缓存)"
+participant ExternalRisk as "外部风控平台"
+participant ReviewQueue as "异步审核队列\n(RocketMQ)"
+participant HOLD as "HOLD Manager"
+participant Admin as "风控运营(人工审核)"
+
+== 正常下单风控检查 PASS ==
+User -> OrderCore: 提交订单
+OrderCore -> RiskPreCheck: preCheck(order, user)
+
+RiskPreCheck -> Redis: 检查黑名单 (user, device, ip)
+Redis --> RiskPreCheck: 未命中
+
+RiskPreCheck -> Redis: 检查白名单 (user)
+Redis --> RiskPreCheck: 未命中
+
+RiskPreCheck -> ExternalRisk: 风控评估 (order, user)
+ExternalRisk --> RiskPreCheck: {decision: "PASS", score: 15}
+
+RiskPreCheck --> OrderCore: {decision: "PASS"}
+OrderCore -> OrderCore: 继续下单流程
+OrderCore --> User: 下单成功
+
+== 可疑订单 进入异步审核 ==
+User -> OrderCore: 提交订单
+OrderCore -> RiskPreCheck: preCheck(order, user)
+
+RiskPreCheck -> Redis: 黑白名单检查 (均未命中)
+RiskPreCheck -> ExternalRisk: 风控评估
+ExternalRisk --> RiskPreCheck: {decision: "REVIEW", score: 55}
+
+RiskPreCheck --> OrderCore: {decision: "REVIEW"}
+OrderCore -> OrderCore: 下单成功 (标记为待审核)
+
+RiskPreCheck -> ReviewQueue: 发送延迟消息 (10min)
+Note right: topic: risk.review\ntag: AUTO_REVIEW\ndelay: 10min
+
+== 10分钟后 自动重评估 ==
+ReviewQueue -> RiskPreCheck: 消费 ReviewMessage
+RiskPreCheck -> ExternalRisk: 重新风控查询 (order)
+ExternalRisk --> RiskPreCheck: {decision: "REJECTED", score: 68}
+
+RiskPreCheck -> HOLD: triggerHold(order, reason="RISK_CONTROL")
+HOLD -> HOLD: 订单状态 → HOLD (复用ADR-039状态机)
+HOLD -> OrderCore: risk.order_hold 事件
+OrderCore -> OrderCore: 订单进入 HOLD 状态
+
+== 人工审核 ==
+Admin -> Admin: 查看 HOLD 队列
+Admin -> HOLD: POST /v1/admin/risk/reviews/{id}/approve
+
+alt 审核通过
+    HOLD -> HOLD: HOLD → 原状态 (PENDING_PAY/PAID)
+    HOLD -> OrderCore: risk.order_released 事件
+    OrderCore -> OrderCore: 订单恢复正常流转
+else 审核拒绝
+    HOLD -> HOLD: HOLD → CANCELLED
+    HOLD -> OrderCore: order.cancelled 事件 (触发Saga补偿)
+end
+
+== 退款风控评分 ==
+User -> OrderCore: 提交退款请求
+OrderCore -> RiskPreCheck: refundScore(order, user)
+RiskPreCheck -> ExternalRisk: 退款风控评估
+ExternalRisk --> RiskPreCheck: {score: 25}
+
+alt score < 30 + 金额≤200 + 未发货
+    RiskPreCheck --> OrderCore: AUTO_APPROVE
+    OrderCore -> OrderCore: 自动审核通过, 发起退款
+else 30 ≤ score < 70 或 金额>200
+    RiskPreCheck --> OrderCore: MANUAL_REVIEW
+    OrderCore -> OrderCore: 入退款审核工单
+else score ≥ 70
+    RiskPreCheck --> OrderCore: REJECT
+    OrderCore -> OrderCore: 退款拒绝
+end
+
+@enduml

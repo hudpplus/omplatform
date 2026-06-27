@@ -1,0 +1,61 @@
+@startuml
+title 订单创建流程（含 Saga 编排）
+
+actor "买家" as buyer
+participant "IGW Buyer" as gw
+participant "order-core" as order
+participant "workflow-service" as wf
+participant "inventory-service" as inv
+queue "RocketMQ" as mq
+participant "ES" as es
+
+' 注：根据 ADR-020 CreateOrderSagaDefinition，完整的下单 Saga 共 4 步：
+' Step 1 createOrder + Step 2 deductInventory 在本图中展示（同步编排）。
+' Step 3 chargePayment + Step 4 confirmOrder 在支付回调后异步执行，
+' 详见 payment-callback.puml 和 saga-orchestration.puml "支付成功 Saga" 阶段。
+' price/coupon/promotion 等步骤通过事件驱动异步处理，不纳入 Saga 编排。
+
+== 前置校验 ==
+buyer -> gw: POST /orders (创建订单)
+gw -> gw: JWT 鉴权 + 参数校验
+gw -> order: 转发请求
+
+== 启动 Saga ==
+order -> wf: 启动 Saga 编排 (createOrderSaga)
+activate wf
+
+== Saga 正向流程 ==
+wf -> order: Step 1: 创建订单（INIT → PENDING_PAY）
+activate order
+order -> order: 订单状态机 INIT → PENDING_PAY
+order --> wf: 成功
+deactivate order
+
+wf -> inv: Step 2: 预占库存（deductInventory）
+activate inv
+inv -> inv: Redis Lua 预占 + DB 记录
+inv --> wf: 成功
+deactivate inv
+
+== 全部成功 ==
+wf --> order: Saga 完成
+activate order
+order -> order: 订单状态确认
+
+order -> mq: 发布 OrderCreatedEvent
+activate mq
+mq -> es: 异步同步订单到 ES (Canal + RocketMQ)
+deactivate mq
+
+order -> gw: 返回订单信息
+gw -> buyer: HTTP 201 (订单详情)
+deactivate order
+deactivate wf
+
+== 补偿流程（任一失败时触发） ==
+note right of wf
+  如果任一 Step 失败，workflow-service
+  自动调用各服务的 compensate 方法逆序补偿
+end note
+
+@enduml

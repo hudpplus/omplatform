@@ -1,0 +1,144 @@
+@startuml
+title 结算中心流程（T+1/T+7/T+30 结算周期）
+
+skinparam participant {
+  BackgroundColor #FEFEFE
+  BorderColor #555555
+}
+
+!define SERVICE_COLOR #E8F5E9
+!define ENGINE_COLOR #E3F2FD
+!define DB_COLOR #F3E5F5
+!define MQ_COLOR #FFF3E0
+!define EXT_COLOR #FFEBEE
+
+actor "财务运营" as finance #FFECB3
+participant "settlement-service\n(结算中心)" as ss #ENGINE_COLOR
+participant "payment-core\n(支付核心)" as pc #SERVICE_COLOR
+database "OceanBase\n(结算单)" as ob #DB_COLOR
+queue "RocketMQ" as mq #MQ_COLOR
+participant "accounting-service\n(会计引擎)" as acct #SERVICE_COLOR
+participant "merchant-bank\n(银行/出款)" as bank #EXT_COLOR
+participant "notification\n(通知服务)" as notif #SERVICE_COLOR
+
+== 结算周期触发 ==
+
+ss -> ss: Cron 触发结算\n(结算截止日 23:59:59)
+note right #E3F2FD
+  结算周期类型:
+  - T+1 每日结算
+  - T+7 每周结算
+  - T+30 每月结算
+  由 Apollo 配置 merchant.settle.cycle
+end note
+
+== Step 1: 生成结算单 ==
+
+ss -> pc: queryOrderByPeriod(merchantId, period)
+activate pc
+pc --> ss: 返回期间内已支付/已退款订单列表
+deactivate pc
+
+ss -> ss: 汇总计算:
+note right
+  - 有效交易总额（已支付 - 已退款）
+  - 平台佣金（按商户费率表）
+  - 通道手续费（按渠道费率）
+  - 退款预扣（期间内已发起退款）
+  - 净额 = 交易总额 - 佣金 - 手续费 - 退款
+end note
+
+ss -> ob: INSERT settlement_order
+activate ob
+ob --> ss: settlement_no = SET20260613001
+deactivate ob
+
+ss -> ob: INSERT settlement_bill (逐单明细)
+activate ob
+ob --> ss: 批量写入成功
+deactivate ob
+
+== Step 2: 结算审核 ==
+
+alt 自动审核（额度 < ¥500,000）
+    ss -> ss: autoApprove()
+    ss -> ob: UPDATE status = APPROVED
+else 人工审核（额度 ≥ ¥500,000）
+    ss -> finance: 待审核结算单通知
+    activate finance
+    finance -> ss: 审核通过 / 驳回
+    deactivate finance
+    ss -> ob: UPDATE status = APPROVED / REJECTED
+end
+
+== Step 3: 出款执行 ==
+
+alt 余额充足
+    ss -> bank: payout(merchantAccount, netAmount)
+    activate bank
+    note right #FFEBEE
+      银行代付接口
+      支持对公/对私账户
+    end note
+    bank --> ss: payout_success(tradeNo)
+    deactivate bank
+    ss -> ob: UPDATE status = TRANSFERRED
+    activate ob
+    ob --> ss: 更新完成
+    deactivate ob
+else 余额不足
+    ss -> ss: 标记 WAITING_FUNDS
+    ss -> finance: P2 告警: 结算账户余额不足
+    note right #FFCDD2
+      等待财务运营充值后
+      手动触发出款
+    end note
+end
+
+== Step 4: 账务处理 ==
+
+ss -> mq: publish SettlementCompletedEvent
+activate mq
+mq --> ss: publish ok
+deactivate mq
+
+mq -> acct: 消费 SettlementCompletedEvent
+activate acct
+acct -> ob: INSERT account_journal
+note right #E3F2FD
+  借: 应收账款  ¥10,000
+  贷: 主营业务收入 ¥9,600
+  贷: 应付手续费  ¥300
+  贷: 应交税费    ¥100
+end note
+acct --> mq: 记账完成
+deactivate acct
+
+== Step 5: 商家通知 ==
+
+mq -> notif: 消费 SettlementCompletedEvent
+activate notif
+notif -> notif: 生成结算报告
+notif --> mq: 通知已发送
+deactivate notif
+
+note right #FEFEFE
+  通知渠道:
+  - 商家工作台消息
+  - 邮件发送结算报告
+  - 短信提醒 (大额)
+end note
+
+== Step 6: 退款预扣（跨周期场景） ==
+
+note over ss #FFF3E0
+  场景: 本期已结算的订单
+  在下一周期发生退款
+  处理: 从下一期结算净额中抵扣
+end note
+
+ss -> ss: 查询本期退款预扣明细
+ss -> ob: UPDATE settlement_order.adjustment
+ss -> ob: 生成负向结算单 (退款冲抵)
+
+@enduml

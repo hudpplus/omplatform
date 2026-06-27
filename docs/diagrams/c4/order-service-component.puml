@@ -1,0 +1,105 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title 组件图 — order-core 服务内部架构 (Level 3)
+
+LAYOUT_WITH_LEGEND()
+
+' === 外部依赖 ===
+ContainerDb(ob, "OceanBase", "主数据库")
+ContainerDb(redis, "Redis", "缓存 + 锁")
+ContainerDb(mq, "RocketMQ", "消息队列")
+ContainerDb(es, "Elasticsearch", "搜索引擎")
+ContainerDb(apollo, "Apollo", "配置中心")
+
+System_Boundary(order_core, "order-core 服务") {
+
+  ' === 接口层 ===
+  Component(rest_ctrl, "Rest Controller", "Spring MVC", "对外 HTTP 接口")
+  Component(dubbo_api, "Dubbo API", "Apache Dubbo", "对内 RPC 接口")
+
+  ' === 应用层：原子服务 ===
+  Component(create_svc, "OrderCreateService", "Atomic Service", "订单创建")
+  Component(payment_svc, "PaymentProcessService", "Atomic Service", "支付处理（PENDING_PAY→PAID）")
+  Component(modify_svc, "OrderModifyService", "Atomic Service", "地址/备注/价格修改")
+  Component(split_svc, "OrderSplitService", "Atomic Service", "按仓库/商家/品类拆分")
+  Component(merge_svc, "OrderMergeService", "Atomic Service", "同买家同店合并")
+  Component(cancel_svc, "OrderCancelService", "Atomic Service", "取消订单")
+  Component(confirm_svc, "ConfirmReceiptService", "Atomic Service", "确认收货（SHIPPED→DELIVERED）")
+  Component(freeze_svc, "OrderAdminService", "Atomic Service", "管理员冻结/解冻/强制转换")
+
+  ' === 领域层 ===
+  Component(state_engine, "OrderStateMachineEngine", "Domain Service", "状态机引擎")
+  Component(state_matrix, "OrderStateTransitionMatrix", "Domain Service", "13×13 转换矩阵校验")
+  Component(guard_registry, "GuardRegistry", "Domain Service", "守卫条件注册表")
+  Component(action_registry, "ActionRegistry", "Domain Service", "入口/出口动作注册")
+  Component(order_agg, "Order Aggregate", "Domain Model", "订单聚合根")
+  Component(domain_event, "Domain Event Publisher", "Domain Service", "领域事件发布")
+  Component(ext_spi, "Extension SPI", "Extension Point", "业务线扩展点接口")
+
+  ' === 基础设施层 ===
+  Component(repo, "OrderRepository", "MyBatis-Plus", "订单仓储实现")
+  Component(cache_mgr, "CacheManager", "Redis + Caffeine", "多级缓存管理")
+  Component(mq_pub, "MQ Publisher", "RocketMQ", "消息发送")
+  Component(id_client, "IdClient", "Dubbo", "分布式 ID 获取")
+  Component(sharding_enc, "ShardingSphere Encrypt", "数据加密", "字段透明加解密")
+
+  ' === 扩展实现 ===
+  Component(ecommerce_ext, "Ecommerce Ext", "SPI 实现", "电商业务定制")
+  Component(locallife_ext, "LocalLife Ext", "SPI 实现", "本地生活业务定制")
+  Component(b2b_ext, "B2B Ext", "SPI 实现", "B2B 供应链定制")
+
+}
+
+' === 外部依赖（其他服务） ===
+System_Ext(workflow, "workflow-service", "流程引擎（ADR-037）调用原子服务")
+System_Ext(stuck_detector, "StuckOrderDetector", "XXL-Job 卡单检测（ADR-039）")
+
+' === 原子服务内部关系 ===
+Rel(rest_ctrl, create_svc, "委托", "")
+Rel(rest_ctrl, cancel_svc, "委托", "")
+Rel(rest_ctrl, modify_svc, "委托", "")
+Rel(dubbo_api, create_svc, "委托", "")
+Rel(dubbo_api, cancel_svc, "委托", "")
+
+Rel(workflow, create_svc, "调用", "Saga Step")
+Rel(workflow, payment_svc, "调用", "Saga Step")
+Rel(workflow, split_svc, "调用", "Step 0 拆单")
+Rel(workflow, merge_svc, "调用", "XXL-Job 调度")
+
+' === 状态机引擎关系 ===
+Rel(create_svc, state_engine, "校验+转换", "transition()")
+Rel(payment_svc, state_engine, "校验+转换", "transition()")
+Rel(modify_svc, state_engine, "校验", "canTransition()")
+Rel(split_svc, state_engine, "批量转换", "transitionBatch()")
+Rel(cancel_svc, state_engine, "校验+转换", "transition()")
+Rel(confirm_svc, state_engine, "校验+转换", "transition()")
+Rel(freeze_svc, state_engine, "强制转换", "forceTransition()")
+
+Rel(state_engine, state_matrix, "查询转换矩阵", "isValid()")
+Rel(state_engine, guard_registry, "执行守卫条件", "evaluateGuards()")
+Rel(state_engine, action_registry, "触发入口/出口动作", "onEntry() / onExit()")
+
+Rel(create_svc, order_agg, "操作聚合根", "")
+Rel(create_svc, ext_spi, "调用扩展点", "")
+Rel(ext_spi, ecommerce_ext, "路由", "business_type")
+Rel(ext_spi, locallife_ext, "路由", "business_type")
+Rel(ext_spi, b2b_ext, "路由", "business_type")
+Rel(order_agg, domain_event, "发布事件", "")
+Rel(order_agg, repo, "持久化", "")
+Rel(repo, sharding_enc, "加密处理", "")
+Rel(domain_event, mq_pub, "发送", "")
+
+' === 外部关系 ===
+Rel(rest_ctrl, gateway, "对外暴露", "HTTPS")
+Rel(repo, ob, "读写", "JDBC")
+Rel(sharding_enc, ob, "加密列", "透明加密")
+Rel(cache_mgr, redis, "缓存读写", "Redis Protocol")
+Rel(mq_pub, mq, "事件推送", "RocketMQ")
+Rel(id_client, id_gen, "获取 ID", "Dubbo")
+
+Rel(stuck_detector, state_engine, "超时处理", "transition()")
+Rel(stuck_detector, repo, "扫描卡单", "findStuckOrders()")
+
+SHOW_LEGEND()
+@enduml

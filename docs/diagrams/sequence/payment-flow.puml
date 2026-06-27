@@ -1,0 +1,247 @@
+@startuml
+title 支付全流程（正向支付 + 逆向退款）
+
+skinparam participant {
+  BackgroundColor #FEFEFE
+  BorderColor #555555
+}
+
+!define SERVICE_COLOR #E8F5E9
+!define ENGINE_COLOR #E3F2FD
+!define DB_COLOR #F3E5F5
+!define MQ_COLOR #FFF3E0
+!define EXT_COLOR #FFEBEE
+
+== 正向支付流程 ==
+
+actor "支付渠道\n(支付宝/微信)" as channel #EXT_COLOR
+participant "payment-gateway\n(SPI 适配器)" as pgw #ENGINE_COLOR
+participant "payment-core\n(支付核心)" as pc #SERVICE_COLOR
+database "OceanBase\n(支付单)" as ob #DB_COLOR
+database "Redis\n(幂等)" as redis #DB_COLOR
+participant "order-core\n(订单核心)" as oc #SERVICE_COLOR
+participant "inventory-service\n(库存服务)" as inv #SERVICE_COLOR
+queue "RocketMQ\n(事件中心)" as mq #MQ_COLOR
+participant "notification\n(通知服务)" as notif #SERVICE_COLOR
+
+channel -> pgw: 异步回调 POST\n(signature + transaction_id)
+activate pgw
+
+pgw -> pgw: ① 签名验证 (RSA256)
+note right #E3F2FD
+  验证步骤:
+  1. 从签名提取 channel_code
+  2. 查 payment_channel_config
+  3. 获取渠道公钥
+  4. RSA256 验签
+end note
+
+alt 验签失败
+    pgw --> channel: HTTP 401 (签名不匹配)
+    note right #FFCDD2
+      记录告警日志
+      P2 告警推送
+    end note
+    deactivate pgw
+    @enduml
+    @startuml
+    ... 续
+end
+
+pgw -> pgw: ② 路由匹配
+note right
+  路由规则（Apollo 配置）:
+  - 按金额: ≤¥5000 走支付宝
+  - 按渠道: 微信支付优先
+  - 按商户: 指定渠道
+end note
+
+== Step 3: 幂等与支付单创建 ==
+
+pgw -> redis: SETNX payment_req_{reqNo}
+activate redis
+redis --> pgw: OK / 已存在
+deactivate redis
+
+alt 重复回调
+    pgw --> channel: HTTP 200 (已处理)
+    deactivate pgw
+    note right
+      幂等返回 200 而非 4xx
+      避免渠道重试风暴
+    end note
+    @enduml
+    @startuml
+    ... 续
+end
+
+pgw -> ob: INSERT payment_order (INIT)
+activate ob
+ob --> pgw: payment_no
+deactivate ob
+
+== Step 4: 调用三方状态查询 ==
+
+pgw -> channel: queryTransaction(transaction_id)
+activate channel
+channel --> pgw: SUCCESS / FAILED / PENDING
+deactivate channel
+
+alt 网关状态 PENDING
+    pgw -> ob: UPDATE status = PROCESSING
+    note right #FFF3E0
+      等待下次回调或
+      延迟任务 5min 后重查
+    end note
+    @enduml
+    @startuml
+    ... 续
+end
+
+== Step 5: 订单状态推进 ==
+
+pgw -> oc: paySuccess(orderNo, amount, paymentNo)
+activate oc
+
+oc -> oc: StateMachine: PENDING_PAY → PAID
+note right #E3F2FD
+  守卫: PaymentAmountGuard
+  金额 ±0.01 以内视为一致
+end note
+
+alt 金额不匹配
+    oc --> pgw: BusinessException
+    pgw -> ob: UPDATE status = FAILED
+    pgw -> channel: HTTP 200 (处理失败)
+    deactivate pgw
+    @enduml
+    @startuml
+    ... 续
+end
+
+oc --> pgw: 成功
+deactivate oc
+
+== Step 6: 库存确认 ==
+
+pgw -> inv: confirmDeduct(orderId)
+activate inv
+inv -> inv: Redis Lua: 临时预占→正式扣减
+inv --> pgw: 确认成功
+deactivate inv
+
+== Step 7: 支付单完成 ==
+
+pgw -> ob: UPDATE status = SUCCESS
+activate ob
+ob --> pgw: 更新完成
+deactivate ob
+
+pgw -> mq: 发布 OrderPaidEvent\n(payment_no, order_no, amount, pay_time)
+note right #FFF3E0
+  事务消息:
+  - 半消息先发
+  - 本地事务确认后 commit
+  - event_outbox 兜底
+end note
+
+pgw --> channel: HTTP 200 (SUCCESS)
+deactivate pgw
+
+== Step 8: 异步并行处理 ==
+
+par 并行处理
+    mq -> notif: 支付成功通知\n(短信/APP Push)
+    activate notif
+    notif --> mq: OK
+    deactivate notif
+and
+    mq -> mq: 赠积分 / 首单券\n(Hook: after_payment)
+and
+    mq -> mq: ES 索引更新 (Canal)
+end
+
+== 逆向退款流程 ==
+
+participant "refund-core\n(退款引擎)" as rc #ENGINE_COLOR
+participant "workflow-service\n(Saga 编排)" as wf #SERVICE_COLOR
+
+== Step 9: 退款申请 ==
+
+actor "买家/客服" as buyer #FFECB3
+
+buyer -> pc: POST /api/v1/payments/{payNo}/refund
+activate pc
+
+alt 自动审核
+    pc -> pc: 规则引擎判断
+    note right
+      自动通过条件:
+      - 退款金额 ≤ ¥200
+      - 未发货订单
+      - 非风控订单
+    end note
+else 人工审核
+    pc --> buyer: 转入人工审核
+    @enduml
+    @startuml
+    ... 续
+end
+
+== Step 10: 退款执行 ==
+
+pc -> ob: INSERT refund_order (INIT)
+activate ob
+ob --> pc: refund_no
+deactivate ob
+
+pc -> ob: UPDATE payment_order.status = REFUNDING
+activate ob
+ob --> pc: 更新完成
+deactivate ob
+
+pc -> wf: 触发退款 Saga
+activate wf
+
+wf -> rc: processRefund(refund_no)
+activate rc
+
+rc -> channel: refund(transaction_id, amount, reason)
+activate channel
+channel --> rc: refund_id / FAILED
+deactivate channel
+
+alt 网关退款成功
+    rc -> oc: doRefund(orderNo, amount)
+    activate oc
+    oc -> oc: StateMachine: PAID/TO_SHIP → REFUNDING → REFUNDED
+    oc --> rc: OK
+    deactivate oc
+
+    rc -> ob: UPDATE refund_order.status = SUCCESS
+    rc -> ob: UPDATE payment_order.status = REFUNDED
+
+    rc -> mq: 发布 RefundSuccessEvent
+    note right
+      通知:
+      - 库存回滚
+      - 优惠券回退
+      - 结算冲抵
+    end note
+    rc --> wf: 退款完成
+else 网关退款失败
+    rc -> ob: UPDATE refund_order.status = FAILED
+    rc --> wf: 退款失败
+    wf -> pc: P1 告警 + 人工介入
+    note right #FFCDD2
+      自动重试 3x:
+      1min → 5min → 30min
+      超过则 P1 告警
+    end note
+end
+
+deactivate rc
+deactivate wf
+deactivate pc
+
+@enduml

@@ -1,0 +1,54 @@
+server:
+  port: 8088
+
+spring:
+  application:
+    name: egw
+  cloud:
+    gateway:
+      observability:
+        enabled: true
+      routes:
+        - id: channel-webhook
+          uri: lb://oms-channel-adapter
+          predicates:
+            - Path=/api/v1/channel/**
+        - id: open-api-trade
+          uri: lb://oms-trade
+          predicates:
+            - Path=/api/v1/open/orders/**
+        - id: payment-callback
+          uri: lb://oms-finance
+          predicates:
+            - Path=/api/v1/payments/callback/**
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 3000ms
+
+  main:
+    web-application-type: reactive
+
+nacos:
+  discovery:
+    server-addr: localhost:8848
+
+dubbo:
+  application:
+    name: egw
+  registry:
+    address: nacos://localhost:8848
+
+# 链路追踪
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+
+logging:
+  level:
+    com.omplatform: DEBUG
+  pattern:
+    level: "%5p [%X{traceId:-} %X{spanId:-}]"

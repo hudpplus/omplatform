@@ -1,0 +1,74 @@
+@startuml
+!include <C4/C4_Container>
+!include <C4/C4_Context>
+
+title inventory-service 组件架构
+
+LAYOUT_WITH_LEGEND()
+
+Person(buyer, "买家", "通过前端下单的终端用户")
+Person(admin, "运营/管理员", "管理后台操作库存")
+System_Ext(channel, "外部渠道", "JD/Tmall/POS 等销售渠道")
+
+System_Boundary(inv, "inventory-service 库存管理服务") {
+
+  Container(core, "Inventory Core", "Java Service", "预占/确认/释放入口\nSagaAdapter(5x 重试)")
+  Container(lua, "Redis Lua Engine", "Lua Script", "reserve_stock\nconfirm_deduct\nrelease_hold\nundo_deduct")
+  Container(channelMgr, "Channel Isolation", "Java Service", "渠道隔离模式路由\n配额分配/回收")
+  Container(query, "Query & Cache", "Java + Caffeine", "单SKU/批量查询\nL1本地缓存")
+  Container(freeze, "Freeze/Thaw", "Java Service", "冻结/解冻状态机\n冻结事件发布")
+  Container(jobs, "XXL-Jobs", "Java Job", "HoldReleaseJob\nStockReconJob\nChannelReconJob")
+  Container(event, "Event Publisher", "Java + RocketMQ", "库存事件发布\n事务消息")
+
+  Rel(core, lua, "调用", "RedisTemplate.execute")
+  Rel(core, channelMgr, "渠道校验")
+  Rel(core, event, "事件发布")
+  Rel(freeze, event, "frozen/unfrozen 事件")
+  Rel(jobs, lua, "释放过期预占")
+}
+
+System_Ext(redis, "Redis Cluster", "库存预占/扣减数据\nLua 原子脚本执行\nKey 分片")
+System_Ext(db, "OceanBase", "库存持久化\n5 张核心表\n多租户 Schema")
+System_Ext(mq, "RocketMQ", "库存事件\n延迟消息(15min)")
+System_Ext(apollo, "Apollo/Nacos", "Sentinel 阈值\n渠道/冻结配置")
+System_Ext(canal, "Canal", "binlog 同步\nRedis←DB 最终一致")
+System_Ext(order, "order-core", "状态机守卫\nHOLD 评估")
+System_Ext(payment, "payment-core", "confirmDeduct\n支付回调")
+System_Ext(fulfillment, "fulfillment", "备货通知\n发货扣减")
+System_Ext(channelAdapter, "channel-adapter", "渠道库存同步\n(ADR-036)")
+
+' Dubbo 内部调用
+Rel(buyer, order, "下单/支付", "HTTPS")
+Rel(order, core, "reserve/release", "Dubbo")
+Rel(payment, core, "confirmDeduct", "Dubbo")
+Rel(core, redis, "Lua 原子操作", "Jedis Cluster")
+Rel(redis, canal, "binlog 变更捕获")
+Rel(canal, db, "写入持久化")
+Rel(query, redis, "库存查询", "MGET Pipeline")
+Rel(query, db, "降级回退", "JDBC")
+
+' Admin 调用
+Rel(admin, core, "管理操作", "HTTPS")
+Rel(admin, freeze, "冻结/解冻", "HTTPS")
+Rel(admin, channelMgr, "渠道配置", "HTTPS")
+Rel(core, mq, "事件投递", "RocketMQ")
+Rel(jobs, db, "扫描过期预占", "JDBC")
+
+' 外部依赖
+Rel(channelMgr, apollo, "读取渠道配置")
+Rel(freeze, apollo, "读取冻结配置")
+Rel(core, apollo, "Sentinel 阈值/重试配置")
+Rel(channelMgr, channel, "同步库存", "HTTP/API")
+Rel(channelAdapter, channelMgr, "渠道库存配置", "Dubbo")
+Rel(core, fulfillment, "备货通知", "MQ")
+
+' 事件流
+Rel(mq, order, "inventory.reserved\ninventory.confirmed")
+Rel(mq, fulfillment, "inventory.confirmed")
+Rel(mq, channelAdapter, "inventory.frozen\ninventory.unfrozen")
+
+System_Boundary(ext, "外部依赖") {
+}
+
+SHOW_LEGEND()
+@enduml

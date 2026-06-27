@@ -1,0 +1,235 @@
+@startuml 订单异常处理流程
+!include <C4/C4_Container>
+
+skinparam participant {
+    BackgroundColor #FEFEFE
+    BorderColor #555555
+}
+
+' Colors
+!define SERVICE_COLOR #E8F5E9
+!define ENGINE_COLOR #E3F2FD
+!define DB_COLOR #F3E5F5
+!define EXT_COLOR #FCE4EC
+
+title 订单异常处理 — HOLD / 超时关单 / 卡单检测 / 人工干预
+
+' ========== 参与者 ==========
+
+participant "原子服务\n(AtomicService)" as AtomicService #SERVICE_COLOR
+participant "状态机引擎\n(StateMachineEngine)" as Engine #ENGINE_COLOR
+participant "库存服务\n(InventoryService)" as Inventory #SERVICE_COLOR
+collections "延迟任务\n(ADR-021)" as DelayedTask #SERVICE_COLOR
+collections "卡单检测器\n(StuckDetector)" as Detector #SERVICE_COLOR
+collections "退款对账\n(RefundReconcile)" as Reconcile #SERVICE_COLOR
+database "订单DB\n(order)" as OrderDB #DB_COLOR
+actor "客服\n(Admin)" as Admin #EXT_COLOR
+
+' ========== 场景 1：库存不足 → HOLD ==========
+
+== 场景 1：库存不足 → HOLD 挂起 ==
+
+AtomicService -> Engine: transition(PENDING_PAY, HOLD, ctx)
+activate Engine
+
+Engine -> Engine: 守卫：库存不足
+note right #FFCDD2
+  Guard: InventoryAvailableCheck
+  库存可用量 < 订单数量
+  守卫返回 false → 拒绝 PAID 转换
+  改为转入 HOLD 态
+end note
+
+Engine -> OrderDB: UPDATE status=HOLD,\nhold_reason='库存不足', version+=1
+activate OrderDB
+OrderDB --> Engine: ✅
+deactivate Engine
+
+Engine -> Engine: EntryAction: 注册 48h HOLD 超时告警任务
+Engine --> AtomicService: ✅ HOLD
+
+note right #FEFEFE
+  HOLD 生命周期：
+  ① 因库存不足/风控卡住
+  ② 48h 内等待库存补充
+  ③ 超时 → P2 告警
+  ④ 库存恢复 → 自动解除
+  ⑤ 商家放弃 → 取消订单
+end note
+
+' ========== 场景 2：HOLD 自动释放 ==========
+
+== 场景 2：HOLD 自动释放 ==
+
+actor "HoldReleaseJob\n(XXL-Job)" as HoldJob #SERVICE_COLOR
+
+HoldJob -> HoldJob: 每隔 5 分钟扫描 HOLD 态订单
+HoldJob -> Inventory: checkAvailability(orderId)
+activate Inventory
+
+alt 库存已补充
+    Inventory --> HoldJob: ✅ available
+    HoldJob -> Engine: transition(HOLD, PENDING_PAY, '库存补充')
+    activate Engine
+    Engine --> HoldJob: ✅ PENDING_PAY
+    deactivate Engine
+    note right #FEFEFE
+      根据 previous_status 决定恢复目标：
+      • PAID → HOLD → PAID
+      • PENDING_PAY → HOLD → PENDING_PAY
+    end note
+else 仍不足
+    Inventory --> HoldJob: ❌ unavailable
+    HoldJob -> HoldJob: 跳过，下次再检
+end
+
+deactivate Inventory
+
+' ========== 场景 3：支付超时自动关单 ==========
+
+== 场景 3：支付超时自动关单 ==
+
+participant "超时任务\n(PaymentTimeoutHandler)" as TimeoutHandler #SERVICE_COLOR
+
+note right #FEFEFE
+  触发：订单创建时注册 Tier 2
+  RocketMQ 延迟消息（30 分钟）
+end note
+
+DelayedTask -> TimeoutHandler: 30min 超时触发
+activate TimeoutHandler
+
+TimeoutHandler -> OrderDB: 查询订单状态
+activate OrderDB
+
+alt 状态 = PENDING_PAY
+    OrderDB --> TimeoutHandler: 未支付
+    TimeoutHandler -> Engine: transition(PENDING_PAY, CLOSED, '超时')
+    activate Engine
+    Engine --> TimeoutHandler: ✅ CLOSED
+    deactivate Engine
+    note right #FEFEFE
+      超时关单后置动作：
+      • 释放预占库存
+      • 释放优惠券锁定
+      • 记录关单原因
+    end note
+else 状态 ≠ PENDING_PAY（已支付）
+    OrderDB --> TimeoutHandler: 已支付
+    TimeoutHandler -> TimeoutHandler: 跳过（订单已推进）
+    note right #FEFEFE
+      取消的支付超时任务：
+      由于 RocketMQ 延迟消息不可取消，
+      消费者自行判断状态已变更 → 跳过
+    end note
+end
+
+deactivate OrderDB
+deactivate TimeoutHandler
+
+' ========== 场景 4：卡单检测器 ==========
+
+== 场景 4：StuckOrderDetector 卡单检测 ==
+
+actor "StuckOrderDetector\n(XXL-Job)" as DetectorJob #SERVICE_COLOR
+
+DetectorJob -> DetectorJob: 每隔 5 分钟扫描所有非终态订单
+DetectorJob -> OrderDB: SELECT * FROM order\nWHERE status_expires_at < NOW()\nAND status NOT IN (COMPLETED,...)
+
+loop 每个卡单
+    DetectorJob -> DetectorJob: 按超时矩阵配置处理
+    note right #FEFEFE
+      超时矩阵（Apollo 配置驱动）：
+      TO_SHIP > 72h → P2 告警
+      REFUNDING > 72h → 触发退款对账
+      HOLD > 48h → P2 告警
+    end note
+
+    DetectorJob -> Engine: 触发预设处理
+    note right #FEFEFE
+      处理策略：
+      • AUTO_CLOSE → 自动关单
+      • AUTO_CONFIRM → 自动确认
+      • RECONCILE → 触发对账
+      • ALERT_ONLY → 仅告警
+    end note
+end
+
+' ========== 场景 5：退款对账 ==========
+
+== 场景 5：退款状态对账 ==
+
+actor "RefundReconcileJob\n(XXL-Job)" as ReconcileJob #SERVICE_COLOR
+actor "支付网关\n(PaymentGateway)" as PaymentGateway #EXT_COLOR
+
+ReconcileJob -> ReconcileJob: 每隔 30 分钟扫描卡在 REFUNDING/RETURNING 的订单
+ReconcileJob -> OrderDB: SELECT * FROM order\nWHERE status IN (REFUNDING, RETURNING)\nAND status_expires_at < NOW()
+ReconcileJob -> PaymentGateway: queryRefundStatus(txId)
+activate PaymentGateway
+
+alt 支付网关退款成功
+    PaymentGateway --> ReconcileJob: SUCCESS
+    ReconcileJob -> Engine: transition(REFUNDING, REFUNDED, '对账完成')
+    activate Engine
+    Engine --> ReconcileJob: ✅ REFUNDED
+    deactivate Engine
+else 支付网关退款失败
+    PaymentGateway --> ReconcileJob: FAILED
+    ReconcileJob -> ReconcileJob: P1 告警：退款异常
+    note right #FFCDD2
+      告警信息：
+      订单 XXX 支付网关退款失败
+      需要人工介入处理
+    end note
+else 仍处理中
+    PaymentGateway --> ReconcileJob: PENDING
+    ReconcileJob -> ReconcileJob: 跳过，下次再检
+end
+deactivate PaymentGateway
+
+' ========== 场景 6：人工干预 ==========
+
+== 场景 6：人工干预 API ==
+
+Admin -> Admin: 客服通过工作台查看卡单列表
+Admin -> Engine: GET /api/admin/v1/orders/stuck?status=TO_SHIP
+
+note right #FEFEFE
+  返回值：卡单详情
+  • 订单号 / 当前状态
+  • 停留时长 / 超时时间
+  • 最后一次操作记录
+  • 建议操作按钮
+end note
+
+Admin -> Engine: POST /api/admin/v1/orders/{no}/freeze\n{reason: "商家长时间不发货"}
+activate Engine
+Engine -> OrderDB: UPDATE status=FROZEN,\nfrozen_reason='商家长时间不发货'
+OrderDB --> Engine: ✅
+Engine --> Admin: ✅
+note right #FEFEFE
+  冻结效果：
+  • 所有自动任务跳过此订单
+  • 买家可见"订单已冻结，联系客服"
+  • 解冻后恢复原状态
+end note
+deactivate Engine
+
+Admin -> Engine: POST /api/admin/v1/orders/{no}/unfreeze
+activate Engine
+Engine -> OrderDB: UPDATE status=TO_SHIP\n(恢复冻结前状态)
+OrderDB --> Engine: ✅
+Engine --> Admin: ✅
+deactivate Engine
+
+note right #FEFEFE
+  人工干预 API 清单：
+  • freeze — 冻结
+  • unfreeze — 解冻
+  • force-transition（SUPER_ADMIN）
+    — 强制转换（跳过守卫）
+  • stuck — 查询卡单列表
+  所有操作记录审计日志
+end note
+
+@enduml

@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: igw
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        namespace: public
+      config:
+        server-addr: localhost:8848
+        namespace: public
+        file-extension: yaml
+        shared-configs:
+          - data-id: common.yaml
+            refresh: true
+          - data-id: igw.yaml
+            refresh: true

@@ -1,0 +1,62 @@
+@startuml
+title aftersale-service 组件图 (Level 3)
+
+skinparam componentStyle uml1
+
+package "aftersale-service" {
+  [AftersaleController] << Buyer API >>
+  [AftersaleAdminController] << Admin API >>
+  [AftersaleInternalApi] << Internal / Dubbo >>
+  [WarehouseController] << 仓内 API >>
+
+  [AftersaleService] << 核心服务 >>
+  [AuditRuleEngine] << SpEL 规则引擎 >>
+  [AftersaleStateMachine] << 售后状态机 >>
+  [InspectionService] << 质检服务 >>
+
+  [SagaClient] << Dubbo Client >>
+  [PaymentClient] << Dubbo Client >>
+  [OrderClient] << Dubbo Client >>
+  [InventoryClient] << Dubbo Client >>
+  [CouponClient] << Dubbo Client >>
+  [LogisticsClient] << Dubbo Client >>
+  [MemberClient] << Dubbo Client >>
+  [NotificationClient] << MQ Producer >>
+
+  [AftersaleReconJob] << XXL-Job >>
+
+  database "MySQL\naftersale DB" as db {
+    [aftersale_order]
+    [inspection_record]
+    [aftersale_sla_log]
+  }
+
+  database "Caffeine\nL1 Cache" as cache
+}
+
+' === 内部调用关系 ===
+AftersaleController --> AftersaleService : 买家售后
+AftersaleAdminController --> AftersaleService : 客服审核
+WarehouseController --> InspectionService : 签收/质检
+AftersaleController --> AuditRuleEngine : 审核判定（创建）
+
+AftersaleService --> AftersaleStateMachine : 状态迁移校验
+AftersaleService --> AuditRuleEngine : 审核规则匹配
+
+InspectionService --> AftersaleService : 质检结果更新状态
+
+AftersaleService --> SagaClient : 启动退款/换货 Saga
+AftersaleService --> PaymentClient : 发起退款
+AftersaleService --> OrderClient : 同步订单状态
+AftersaleService --> InventoryClient : 释放/回滚库存
+AftersaleService --> CouponClient : 回退优惠券
+AftersaleService --> LogisticsClient : 退货物流查询/换货发货
+AftersaleService --> MemberClient : 平台余额退款
+AftersaleService --> NotificationClient : 售后通知
+
+AftersaleService --> db : JPA / JDBC
+AftersaleService --> cache : 查询缓存
+
+AftersaleReconJob --> AftersaleService : 数据一致性对账
+
+@enduml

@@ -1,0 +1,93 @@
+@startuml
+title 同城三中心部署架构
+
+cloud "全局负载均衡 GSLB" as gslb {
+    note right of gslb: DNS 就近接入 / 故障自动切换
+}
+
+' ===== AZ-A =====
+node "AZ-A（主）" as aza {
+    frame "K8s Node Pool - AZ-A" {
+        component "Internal Gateway" as igw_a
+        component "External Gateway" as egw_a
+        component "服务实例" as svc_a
+        component "OBProxy" as obp_a
+    }
+    database "Redis Cluster" as redis_a
+    database "RocketMQ" as mq_a
+    database "OBServer-1 (Leader)" as ob1
+    database "OBServer-2 (Follower)" as ob2
+}
+
+' ===== AZ-B =====
+node "AZ-B（从）" as azb {
+    frame "K8s Node Pool - AZ-B" {
+        component "Internal Gateway" as igw_b
+        component "External Gateway" as egw_b
+        component "服务实例" as svc_b
+        component "OBProxy" as obp_b
+    }
+    database "Redis Cluster" as redis_b
+    database "RocketMQ" as mq_b
+    database "OBServer-3 (Follower)" as ob3
+    database "OBServer-4 (Follower)" as ob4
+}
+
+' ===== AZ-C =====
+node "AZ-C（仲裁）" as azc {
+    database "OBServer-5 (Arbiter)" as ob5
+    note right of ob5: 仅参与投票，不存数据
+    database "ES Hot/Warm/Cold" as es
+}
+
+' === 流量关系 ===
+gslb --> igw_a: 内部流量 (主)
+gslb --> igw_b: 内部流量 (就近)
+gslb --> egw_a: 外部 API 流量
+gslb --> egw_b: 外部 API 流量
+
+igw_a --> svc_a: 路由
+igw_b --> svc_b: 路由
+egw_a --> svc_a: 路由（脱敏）
+egw_b --> svc_b: 路由（脱敏）
+
+svc_a --> obp_a: SQL
+svc_b --> obp_b: SQL
+
+obp_a --> ob1: 读写
+obp_a --> ob2: 读
+obp_b --> ob3: 读
+obp_b --> ob4: 读
+
+' === Paxos 复制 ===
+ob1 <--> ob3: Paxos 同步 (日志)
+ob1 <--> ob4: Paxos 同步 (日志)
+ob1 <--> ob5: Paxos 投票 (仲裁)
+ob3 <--> ob5: Paxos 投票 (仲裁)
+
+' === Redis / MQ 独立 ===
+note right of redis_a: 各 AZ 独立 Redis Cluster\n不做跨 AZ 实时同步
+note right of mq_a: 各 AZ 独立 RocketMQ\n关键事件跨 AZ 复制
+
+' === ES 跨 AZ ===
+es <--> ob1: 数据同步 (Canal)
+es <--> ob3: 数据同步 (Canal)
+
+' === 关系装饰 ===
+note bottom of aza
+    OB 副本: 2 (1 Leader + 1 Follower)
+    Paxos 权重: 2
+end note
+
+note bottom of azb
+    OB 副本: 2 (2 Follower)
+    Paxos 权重: 2
+end note
+
+note bottom of azc
+    OB 副本: 1 (Arbiter)
+    Paxos 权重: 1
+    Paxos 多数派: 3/5
+end note
+
+@enduml

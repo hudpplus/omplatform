@@ -1,0 +1,2 @@
+com.omplatform.common.tracing.TracingHttpAutoConfiguration
+com.omplatform.common.tracing.TracingDubboAutoConfiguration

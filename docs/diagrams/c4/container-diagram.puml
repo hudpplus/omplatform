@@ -1,0 +1,108 @@
+@startuml omplatform-container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title 容器图 — 订单中台服务与中间件 (Level 2, 2026-06-14 服务合并)
+
+LAYOUT_WITH_LEGEND()
+
+Person(buyer, "买家", "APP/小程序/Web")
+Person(seller, "商家", "商家后台")
+Person(operator, "平台运营", "运营后台")
+Person_Ext(developer, "第三方开发者", "Open API")
+
+' === 外部销售渠道 ===
+Person_Ext(channel_tmall, "天猫", "电商平台 Webhook 推送")
+Person_Ext(channel_jd, "京东", "电商平台 Webhook 推送")
+Person_Ext(channel_douyin, "抖音", "内容电商 Webhook 推送")
+
+System_Boundary(omp, "订单中台") {
+
+  ' === API 网关（合并为 2 个） ===
+  Container(igw, "IGW", "Spring Cloud Gateway", "统一内部流量入口，JWT 认证、路由、限流熔断、审计日志（Buyer/Admin 合一）")
+  Container(egw, "Ext GW", "Spring Cloud Gateway", "外部流量入口，HMAC 签名验证、渠道认证、应用配额管理")
+
+  ' === 7 个合并服务 ===
+  Container(trade, "oms-trade", "Spring Boot + Dubbo", "下单/工作流/购物车/查询/通知 — 合并 order-core + workflow + cart + order-query + notification + id-gen 模块")
+  Container(finance, "oms-finance", "Spring Boot", "支付/售后/结算/对账 — 合并 payment-core + aftersale")
+  Container(fulfillment, "oms-fulfillment", "Spring Boot", "库存/物流 — 合并 inventory + logistics")
+  Container(marketing, "oms-marketing", "Spring Boot", "营销价格/促销/优惠券/会员 — 合并 price + promotion + coupon + member")
+  Container(channel_adapter, "oms-channel-adapter", "Spring Boot + Dubbo", "渠道订单接入、标准化转换、通道认证、状态同步")
+  Container(risk, "oms-risk-integration", "Spring Boot", "外部风控集成、黑白名单、三级降级")
+
+  ' === 中间件 ===
+  ContainerDb(ob, "OceanBase Cluster", "MySQL 兼容分布式数据库", "主数据存储，自动分片")
+  ContainerDb(es, "Elasticsearch Cluster", "搜索引擎", "订单查询、日志检索")
+  ContainerDb(redis, "Redis Cluster", "缓存 + 分布式锁")
+  ContainerDb(mq, "RocketMQ Cluster", "消息队列", "事务消息、事件驱动")
+  ContainerDb(nacos, "Nacos", "注册中心")
+  ContainerDb(apollo, "Apollo", "配置中心", "灰度配置、权限管理")
+
+  ' === 基础设施 ===
+  ContainerDb(skywalking, "SkyWalking", "APM 链路追踪")
+  ContainerDb(prometheus, "Prometheus + Grafana", "监控告警")
+}
+
+' === 外部系统 ===
+System_Ext(payment_channel, "三方支付", "支付宝/微信")
+System_Ext(logistics_provider, "物流商", "顺丰/菜鸟")
+
+' === 关系：人 → Gateway ===
+Rel(buyer, igw, "请求", "HTTPS")
+Rel(seller, igw, "请求", "HTTPS")
+Rel(operator, igw, "请求", "HTTPS")
+Rel(developer, egw, "请求", "HTTPS")
+
+' === 关系：IGW → 服务 ===
+Rel(igw, trade, "路由", "Dubbo")
+Rel(igw, finance, "路由", "Dubbo")
+Rel(igw, fulfillment, "路由", "Dubbo")
+Rel(igw, marketing, "路由", "Dubbo")
+
+' === 关系：Channel/External Gateway → 服务 ===
+Rel(egw, channel_adapter, "路由/Webhook", "HTTPS")
+Rel(egw, trade, "Open API 路由", "Dubbo")
+Rel(egw, finance, "Open API 路由", "Dubbo")
+
+' === 关系：渠道 → Ext GW ===
+Rel(channel_tmall, egw, "Webhook 推送订单", "HTTPS 签名")
+Rel(channel_jd, egw, "Webhook 推送订单", "HTTPS 签名")
+Rel(channel_douyin, egw, "Webhook 推送订单", "HTTPS 签名")
+
+' === 关系：服务间调用 ===
+Rel(trade, finance, "支付/退款", "Dubbo")
+Rel(trade, fulfillment, "库存预占/发货", "Dubbo")
+Rel(trade, marketing, "计价/促销/优惠券", "Dubbo")
+Rel(trade, risk, "风控预检查", "Dubbo")
+Rel(finance, trade, "支付回调通知", "Dubbo")
+Rel(finance, fulfillment, "售后回滚库存", "Dubbo")
+Rel(finance, marketing, "退款回退优惠券", "Dubbo")
+Rel(channel_adapter, trade, "标准化订单创建", "Dubbo")
+Rel(risk, trade, "风控结果回调", "Dubbo")
+
+' === 关系：服务 → 中间件 ===
+Rel(trade, ob, "读写", "JDBC/ShardingSphere")
+Rel(finance, ob, "读写", "JDBC/ShardingSphere")
+Rel(fulfillment, ob, "读写", "JDBC")
+Rel(marketing, ob, "读写", "JDBC")
+Rel(channel_adapter, ob, "写入 channel_raw_order", "JDBC")
+Rel(risk, ob, "读写", "JDBC")
+Rel(trade, redis, "缓存/购物车/库存预占", "Redis Protocol")
+Rel(finance, redis, "缓存", "Redis Protocol")
+Rel(marketing, redis, "缓存/优惠券锁定", "Redis Protocol")
+Rel(trade, mq, "发布领域事件", "RocketMQ")
+Rel(finance, mq, "发布支付/售后事件", "RocketMQ")
+Rel(fulfillment, mq, "发布库存/物流事件", "RocketMQ")
+Rel(marketing, mq, "发布营销事件", "RocketMQ")
+Rel(channel_adapter, mq, "发布 ChannelOrderReceivedEvent", "RocketMQ")
+Rel(trade, es, "Canal binlog 同步 → CQRS 查询", "REST/HTTPS")
+
+' === 关系：服务注册与配置 ===
+Rel(nacos, trade, "服务注册/发现", "gRPC")
+Rel(apollo, trade, "配置下发", "HTTPS")
+
+' === 外部集成 ===
+Rel(finance, payment_channel, "支付请求", "HTTPS")
+Rel(fulfillment, logistics_provider, "物流查询", "HTTPS")
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,211 @@
+@startuml 状态机引擎转换流程
+!include <C4/C4_Container>
+
+skinparam participant {
+    BackgroundColor #FEFEFE
+    BorderColor #555555
+}
+
+' Colors
+!define SERVICE_COLOR #E8F5E9
+!define ENGINE_COLOR #E3F2FD
+!define DB_COLOR #F3E5F5
+!define MQ_COLOR #FFF3E0
+
+title 状态机引擎 — 状态转换流程
+
+' ========== 参与者 ==========
+
+actor "流程引擎\n(ProcessEngine)" as ProcessEngine #SERVICE_COLOR
+participant "原子服务\n(AtomicOrderService)" as AtomicService #SERVICE_COLOR
+participant "状态机引擎\n(StateMachineEngine)" as Engine #ENGINE_COLOR
+participant "转换矩阵\n(TransitionMatrix)" as Matrix #ENGINE_COLOR
+collections "守卫条件\n(Guards)" as Guards #ENGINE_COLOR
+collections "入口/出口动作\n(ActionRegistry)" as Actions #ENGINE_COLOR
+database "订单存储\n(order)" as OrderDB #DB_COLOR
+database "转换日志\n(transition_log)" as LogDB #DB_COLOR
+participant "事件发布器\n(EventPublisher)" as EventPublisher #MQ_COLOR
+
+' ========== 流程 ==========
+
+== 阶段 1：触发转换 ==
+
+ProcessEngine -> AtomicService: execute(orderId, context)
+activate AtomicService
+
+AtomicService -> AtomicService: validate(orderId, context)
+note right #FEFEFE
+  前置校验：
+  状态可操作？业务条件满足？
+end note
+
+' ========== 阶段 2：状态机引擎执行转换 ==========
+
+== 阶段 2：状态机引擎执行转换 ==
+
+AtomicService -> Engine: transition(orderId, current, target, context)
+activate Engine
+
+Engine -> Matrix: isValid(current, target)
+activate Matrix
+Matrix --> Engine: true / false
+deactivate Matrix
+
+alt 非法转换
+    Engine --> AtomicService: ❌ throw IllegalStateTransitionException
+    AtomicService --> ProcessEngine: 返回错误
+    note right #FFCDD2
+      禁止转换：
+      COMPLETED → REFUNDING ❌
+      PAID → PENDING_PAY ❌
+    end note
+else 转换合法
+    Engine -> Guards: evaluateGuards(orderId, current, target, context)
+    activate Guards
+
+    loop 遍历守卫集合
+        Guards -> Guards: guard.evaluate(orderId, context)
+        alt 守卫拒绝
+            Guards --> Engine: false (reject)
+            Engine --> AtomicService: ❌ throw StateGuardRejectedException
+            note right #FFCDD2
+              守卫拒绝：
+              • 支付金额不匹配
+              • 已发货不能取消
+              • 库存仍未补充
+            end note
+            deactivate Guards
+        end
+    end
+
+    Guards --> Engine: all passed
+    deactivate Guards
+
+    ' ====== 乐观锁获取 ======
+
+    Engine -> OrderDB: findByIdForUpdate(orderId)
+    activate OrderDB
+    OrderDB --> Engine: Order(version=3, status=PENDING_PAY)
+    deactivate OrderDB
+
+    alt 版本不匹配
+        Engine --> AtomicService: ❌ throw OptimisticLockException
+        note right #FFCDD2
+          并发冲突：
+          预期 status=PENDING_PAY
+          实际 status=PAID（已被支付回调修改）
+        end note
+    else 版本匹配
+        ' ====== 出口动作 ======
+
+        Engine -> Actions: executeExitActions(current, order, ctx)
+        activate Actions
+        Actions --> Engine: OK
+        deactivate Actions
+
+        note right #FEFEFE
+          出口动作：
+          离开 PENDING_PAY 时
+          取消 30min 超时任务
+        end note
+
+        ' ====== CAS 更新 ======
+
+        Engine -> OrderDB: UPDATE status=target\nWHERE status=current AND version=v
+        activate OrderDB
+
+        alt 更新成功（影响行数=1）
+            OrderDB --> Engine: updated=1
+
+            ' ====== 入口动作 ======
+
+            Engine -> Actions: executeEntryActions(target, order, ctx)
+            activate Actions
+            Actions --> Engine: OK
+            deactivate Actions
+
+            note right #FEFEFE
+              入口动作：
+              进入 PAID 时
+              注册 24h 超时未发货告警任务
+              发布 OrderPaidEvent
+            end note
+
+            ' ====== 记录审计日志 ======
+
+            Engine -> LogDB: INSERT transition_log\n(orderNo, from, to, operator, duration)
+            activate LogDB
+            LogDB --> Engine: OK
+            deactivate LogDB
+
+            ' ====== 发布事件 ======
+
+            Engine -> EventPublisher: publish(OrderStatusChangedEvent)
+            activate EventPublisher
+            EventPublisher --> Engine: OK
+            deactivate EventPublisher
+
+            Engine --> AtomicService: ✅ newStatus=PAID
+
+        else 更新失败（行锁竞争）
+            OrderDB --> Engine: updated=0
+            Engine -> Engine: 重试? retryCount++
+            alt 重试 < maxRetries
+                Engine -> OrderDB: 重新查询最新状态
+                note right #FEFEFE
+                  重试策略：指数退避
+                  第 1 次 + 100ms
+                  第 2 次 + 200ms
+                  第 3 次 + 400ms
+                end note
+            else 重试耗尽
+                Engine --> AtomicService: ❌ throw OptimisticLockException
+                note right #FFCDD2
+                  重试 3 次仍失败
+                  返回最终错误
+                end note
+            end
+        end
+        deactivate OrderDB
+    end
+end
+
+deactivate Engine
+
+' ========== 阶段 3：原子服务后置处理 ==========
+
+== 阶段 3：原子服务后置处理 ==
+
+alt 转换成功
+    AtomicService -> AtomicService: doExecute(orderId, context)
+    note right #FEFEFE
+      业务逻辑执行：
+      • 写入支付记录
+      • 确认预占库存
+    end note
+    AtomicService --> ProcessEngine: ✅ 操作完成
+else 转换失败
+    AtomicService --> ProcessEngine: ❌ 错误码 + 描述
+    note right #FEFEFE
+      调用方根据错误码：
+      • 1101 非法状态转换 → 提示用户
+      • 2004 守卫拒绝 → 展示拒绝原因
+      • 5003 乐观锁冲突 → 自动重试
+    end note
+end
+
+deactivate AtomicService
+
+note right #FEFEFE
+  状态机引擎核心流程：
+  ① 合法性校验（矩阵拦截非法转换）
+  ② 守卫评估（业务规则拦截不满足条件的转换）
+  ③ 乐观锁获取（防止并发状态冲突）
+  ④ 出口动作（离开前清理）
+  ⑤ CAS 更新（原子状态变更）
+  ⑥ 入口动作（进入后初始化）
+  ⑦ 审计日志（全量记录）
+  ⑧ 事件发布（通知下游）
+end note
+
+@enduml

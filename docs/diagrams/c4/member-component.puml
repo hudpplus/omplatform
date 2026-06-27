@@ -1,0 +1,64 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title 会员管理服务组件架构 (Member Service Component Diagram)
+
+Person(user, "买家", "APP/WEB")
+Person(admin, "运营管理员", "会员管理端")
+
+System_Ext(order_core, "order-core", "订单核心(ADR-039)")
+System_Ext(price, "price-service", "计价引擎(ADR-045)")
+System_Ext(promotion, "promotion-service", "促销引擎(ADR-045)")
+System_Ext(notification, "notification-service", "推送通知")
+
+System_Boundary(member, "member-service") {
+    Container_Boundary(core, "Member Core 会员核心") {
+        Component(info, "MemberInfoService", "Java", "会员信息查询")
+        Component(tier, "MemberTierService", "Java", "等级判定")
+        Component(upgrade, "MemberUpgradeService", "Java", "升级处理")
+        Component(downgrade, "MemberDowngradeJob", "XXL-Job", "季度降级评估")
+    }
+
+    Container_Boundary(points, "Points & Growth 积分与成长值") {
+        Component(earn, "PointsEarnService", "Java", "积分获得")
+        Component(spend, "PointsSpendService", "Java", "积分抵扣")
+        Component(growth, "GrowthAccumulateService", "Java", "成长值累计")
+        Component(expire, "PointsExpireJob", "XXL-Job", "积分过期")
+    }
+
+    Container_Boundary(benefits, "Benefits & Integration 权益与集成") {
+        Component(benefit_cfg, "BenefitConfigService", "Java", "权益配置管理")
+        Component(member_price, "MemberPriceService", "Java", "会员价查询")
+        Component(shipping, "FreeShippingService", "Java", "免运费判定")
+        Component(event_pub, "EventPublisher", "RocketMQ", "会员事件")
+    }
+}
+
+System_Ext(redis, "Redis Cache L2", "等级定义/会员信息缓存(60s TTL)")
+System_Ext(db, "OceanBase", "7张表: member/tier/points/growth/benefit")
+System_Ext(mq, "RocketMQ", "会员事件")
+
+Rel(user, info, "HTTP", "查询会员信息")
+Rel(user, tier, "HTTP", "查询等级")
+Rel(user, earn, "HTTP", "查看积分")
+Rel(admin, tier, "HTTP", "等级管理")
+Rel(admin, benefit_cfg, "HTTP", "权益配置")
+Rel(admin, member_price, "HTTP", "会员价配置")
+Rel(info, redis, "缓存")
+Rel(info, db, "持久化")
+Rel(order_core, growth, "事件消费", "订单完成→成长值")
+Rel(order_core, earn, "事件消费", "订单完成→积分发放")
+Rel(price, member_price, "Dubbo", "计价管道查询折扣率")
+Rel(price, shipping, "Dubbo", "运费计算查免运费门槛")
+Rel(price, tier, "Dubbo", "查会员等级")
+Rel(promotion, tier, "Dubbo", "促销条件判等级")
+Rel(member_price, db, "查配置")
+Rel(upgrade, mq, "发 level_changed")
+Rel(downgrade, notification, "降级预警")
+Rel(earn, mq, "发 points_changed")
+Rel(expire, notification, "积分过期提醒")
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,107 @@
+@startuml
+title Saga 分布式事务编排全景
+
+participant "workflow-service\n(Saga Orchestrator)" as wf
+participant "order-core" as order
+participant "inventory-service" as inv
+participant "coupon-service" as coupon
+participant "promotion-service" as promo
+participant "payment-core" as payment
+queue "RocketMQ\n(重试队列)" as mq
+database "死信队列\n(人工介入)" as dlq
+
+' ADR-020 CreateOrderSagaDefinition 共 4 步，分两阶段执行：
+' 阶段一（本图）: Step 1 createOrder + Step 2 deductInventory
+' 阶段二（见 payment-callback.puml）: Step 3 chargePayment + Step 4 confirmOrder
+
+== 正向流程（订单创建 — Saga Step 1+2）==
+group 订单创建 Saga
+    wf -> order: 1.1 createOrder()
+    activate order
+    order --> wf: 成功 (订单ID)
+    deactivate order
+
+    wf -> inv: 1.2 reserveStock()
+    activate inv
+    inv --> wf: 成功
+    deactivate inv
+
+    wf -> coupon: 1.3 lockCoupon()
+    activate coupon
+    coupon --> wf: 成功
+    deactivate coupon
+
+    wf -> promo: 1.4 updateUsageCount()
+    activate promo
+    promo --> wf: 成功
+    deactivate promo
+end
+
+== 补偿流程（任一失败触发）==
+note over wf: 如果 1.4 失败，reverse 执行补偿
+
+group Saga 补偿
+    wf -> promo: Compensate: 回滚促销用量
+    activate promo
+    promo --> wf: 成功
+    deactivate promo
+
+    wf -> coupon: Compensate: 解锁优惠券
+    activate coupon
+    coupon --> wf: 成功
+    deactivate coupon
+
+    wf -> inv: Compensate: 释放库存
+    activate inv
+    inv --> wf: 成功
+    deactivate inv
+
+    wf -> order: Compensate: 取消订单 (CANCELLED)
+    activate order
+    order --> wf: 成功
+    deactivate order
+end
+
+note over wf: 补偿完成 → 订单最终状态 CANCELLED
+
+== 超时与重试机制 ==
+group 超时处理
+    wf -> inv: 预占库存
+    activate inv
+    note right: ⏱ 10s 无响应
+    wf -> inv: ⚠️ 重试第 1 次
+    wf -> inv: ⚠️ 重试第 2 次
+    inv --> wf: 失败 (库存不足)
+    deactivate inv
+
+    alt 重试耗尽
+        wf -> mq: 发送到重试队列
+        mq -> dlq: 重试 3 次仍失败 → 死信队列
+        note right: ⚠️ 运营人工介入处理
+    end
+end
+
+== 支付成功 Saga（非补偿型）==
+group 支付成功 Saga
+    payment -> wf: 支付成功回调
+    activate wf
+    wf -> order: 2.1 paySuccess() (PENDING_PAY → PAID)
+    activate order
+    order --> wf: 成功
+    deactivate order
+
+    wf -> inv: 2.2 confirmDeduct()
+    activate inv
+    inv --> wf: 成功
+    deactivate inv
+
+    wf -> logistics: 2.3 createFulfillment()
+    activate logistics
+    logistics --> wf: 成功
+    deactivate logistics
+
+    note right: 支付成功不补偿\n失败 → 人工介入 + 对账补偿
+    deactivate wf
+end
+
+@enduml

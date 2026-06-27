@@ -1,0 +1,228 @@
+@startuml
+title 库存两阶段预占协议（正向预占确认 + 逆向释放补偿）
+
+skinparam participant {
+  BackgroundColor #FEFEFE
+  BorderColor #555555
+}
+
+!define SERVICE_COLOR #E8F5E9
+!define ENGINE_COLOR #E3F2FD
+!define DB_COLOR #F3E5F5
+!define MQ_COLOR #FFF3E0
+
+== Phase 1: 预占库存（下单时） ==
+
+actor "买家" as buyer
+participant "order-core\n(订单核心)" as oc #SERVICE_COLOR
+participant "workflow-service\n(Saga 编排)" as wf #SERVICE_COLOR
+participant "inventory-service" as inv #ENGINE_COLOR
+database "Redis Cluster\n(Lua 引擎)" as redis #DB_COLOR
+database "OceanBase\n(持久层)" as ob #DB_COLOR
+queue "RocketMQ\n(事件中心)" as mq #MQ_COLOR
+
+buyer -> oc: 提交订单\n(含 SKU + 数量)
+activate oc
+
+oc -> oc: ① 前置校验\n（商品可售/价格/风控）
+note right #E8F5E9
+  校验项:
+  1. 商品状态 ACTIVE
+  2. 价格一致性
+  3. 风控规则
+end note
+
+oc -> wf: 触发 Saga CreateOrder
+activate wf
+
+== Step 2: 预占库存 ==
+
+wf -> inv: deductInventory(skuId, qty,\n orderNo, requestId)
+activate inv
+
+inv -> redis: reserve_stock.lua\nKEYS: stock:{sku}:available\n      stock:{sku}:reserved
+activate redis
+
+note right #E3F2FD
+  Lua 原子操作:
+  1. GET available_qty
+  2. 库存不足 → return 4001
+  3. 幂等检查 (request_id)
+  4. DECRBY available_qty
+  5. INCRBY reserved_qty
+  6. SET hold_detail Hash
+  7. EXPIRE hold 900s
+end note
+
+alt 库存不足
+    redis --> inv: {code:4001, available:0}
+    inv --> wf: BusinessException(库存不足)
+    wf -> oc: Saga 补偿 → 回滚订单
+    oc -> oc: 状态机 → CANCELLED
+    deactivate wf
+    deactivate oc
+    note right #FFCDD2
+      下单失败：
+      1. 订单回滚 INIT→CANCELLED
+      2. 释放优惠券锁定
+      3. 返回库存不足提示
+    end note
+    @enduml
+    @startuml
+    ... 续
+end
+
+redis --> inv: {code:200, hold_id, quantity}
+deactivate redis
+
+inv -> ob: INSERT inventory_hold\n(status=RESERVED, expire_at=NOW+15min)
+activate ob
+ob --> inv: OK
+deactivate ob
+
+inv -> mq: 发布 inventory.reserved\n(hold_id, sku, qty, order_no)
+note right #FFF3E0
+  事务消息:
+  半消息先发 → 本地事务
+  确认后 commit
+end note
+
+inv --> wf: 预占成功
+deactivate inv
+
+wf -> oc: Step 1 回写确认\n(订单状态不变)
+deactivate wf
+
+oc --> buyer: 下单成功 → PENDING_PAY
+deactivate oc
+
+== Phase 2: 确认扣减（支付成功） ==
+
+participant "payment-core\n(支付核心)" as ps #ENGINE_COLOR
+
+buyer -> buyer: 用户完成支付
+ps -> ps: 支付回调处理完成
+
+ps -> inv: confirmDeduct(holdId, quantity,\n requestId)
+activate inv
+
+inv -> redis: confirm_deduct.lua\nKEYS: stock:{sku}:reserved\n      stock:{sku}:deducted
+activate redis
+
+note right #E3F2FD
+  Lua 校验:
+  1. 查 hold_detail.status
+  2. 必须是 RESERVED
+  3. 已 CONFIRMED → 幂等返回
+  4. DECRBY reserved_qty
+  5. INCRBY deducted_qty
+  6. 更新 status=CONFIRMED
+  7. EXPIRE 延长到 24h
+end note
+
+redis --> inv: {code:200, message:"确认成功"}
+deactivate redis
+
+inv -> ob: UPDATE inventory_hold\nstatus=CONFIRMED, confirmed_at=NOW()
+activate ob
+ob --> inv: OK
+deactivate ob
+
+inv -> mq: 发布 inventory.confirmed\n(hold_id, sku, qty, order_no)
+note right #FFF3E0
+  消费者:
+  - order-core: PAID 状态
+  - fulfillment: 备货通知
+end note
+
+inv --> ps: 确认成功
+deactivate inv
+
+== Phase 3: 释放预占（订单取消/Saga 补偿） ==
+
+actor "系统/客服" as system
+
+system -> oc: 取消订单
+activate oc
+
+oc -> wf: 触发 Saga Compensate
+activate wf
+
+wf -> inv: undoDeduct(orderNo, requestId)
+note right #FFCDD2
+  释放条件:
+  - 订单取消 CANCELLED
+  - 支付超时 CLOSED
+  - Saga 补偿流程
+end note
+activate inv
+
+inv -> redis: release_hold.lua\nKEYS: stock:{sku}:available\n      stock:{sku}:reserved
+activate redis
+
+note right #E3F2FD
+  Lua 操作:
+  1. 查 hold_detail.status
+  2. RESERVED → 释放
+  3. CONFIRMED → 走 undo_deduct
+  4. 已 RELEASED → 幂等返回
+  5. INCRBY available_qty
+  6. DECRBY reserved_qty
+  7. DEL hold_detail
+end note
+
+redis --> inv: {code:200, message:"释放成功"}
+deactivate redis
+
+inv -> ob: UPDATE inventory_hold\nstatus=RELEASED, released_at=NOW()
+activate ob
+ob --> inv: OK
+deactivate ob
+
+inv -> mq: 发布 inventory.released\n(hold_id, sku, qty, order_no)
+note right
+  通知:
+  - notification: 取消通知
+  - 优惠券回滚（已独立处理）
+end note
+
+inv --> wf: 释放完成
+deactivate inv
+
+wf --> oc: 补偿完成
+deactivate wf
+
+oc --> system: 订单已取消
+deactivate oc
+
+== 后台守护任务 ==
+
+participant "XXL-Job\n(HoldReleaseJob)" as job #DB_COLOR
+
+job -> job: 每 5min 扫描\nstatus=RESERVED\nAND expire_at < NOW()
+
+job -> ob: SELECT 过期预占记录\n(keyset 分页, 每次 100 条)
+activate ob
+ob --> job: 过期记录列表
+deactivate ob
+
+loop 每批 100 条
+    job -> redis: release_hold.lua\n(逐个释放过期预占)
+    activate redis
+    redis --> job: 释放结果
+    deactivate redis
+
+    job -> ob: UPDATE status=TIMEOUT
+    activate ob
+    ob --> job: OK
+    deactivate ob
+
+    job -> mq: 发布 inventory.released\n(reason=TIMEOUT)
+end
+note right #FFF3E0
+  RocketMQ 延迟消息 (15min) 作为第一道防线
+  XXL-Job 每 5min 扫描 DB 作为兜底
+  双重保证避免预占泄漏
+end note
+
+@enduml

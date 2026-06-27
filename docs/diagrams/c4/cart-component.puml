@@ -1,0 +1,81 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title 购物车服务组件架构 (Cart Service Component Diagram)
+
+Person(user, "买家", "APP/WEB 用户")
+Person(admin, "运营管理员", "购物车管理端")
+
+System_Ext(inventory, "inventory-service", "库存查询(ADR-043)")
+System_Ext(price, "price-service", "计价引擎(ADR-045)")
+System_Ext(promotion, "promotion-service", "促销引擎(ADR-045)")
+System_Ext(member, "member-service", "会员服务(ADR-046)")
+System_Ext(order, "order-core", "下单(ADR-039)")
+
+System_Boundary(cart, "cart-service") {
+    Container_Boundary(api, "API Layer") {
+        Container(buyer_api, "Buyer Cart API", "Spring Boot", "POST /api/v1/cart/*")
+        Container(admin_api, "Admin Cart API", "Spring Boot", "POST /api/admin/v1/cart/*")
+    }
+
+    Container_Boundary(core, "Cart Manager 购物车核心") {
+        Component(cart_add, "CartAddService", "Java", "加购(Redis Lua)")
+        Component(cart_modify, "CartModifyService", "Java", "改数量/规格")
+        Component(cart_delete, "CartDeleteService", "Java", "删除单项")
+        Component(cart_query, "CartQueryService", "Java", "查询购物车")
+        Component(cart_merge, "CartMergeService", "Java", "匿名→登录合并")
+        Component(cart_clear, "CartClearService", "Java", "清空购物车")
+        Component(cart_select, "CartSelectService", "Java", "勾选/全选")
+    }
+
+    Container_Boundary(lua, "Redis Lua Engine") {
+        Component(add_lua, "add_item.lua", "Lua", "原子加购")
+        Component(modify_lua, "modify_item.lua", "Lua", "原子修改")
+        Component(merge_lua, "merge_cart.lua", "Lua", "原子合并")
+        Component(delete_lua, "delete_item.lua", "Lua", "原子删除")
+        Component(batch_lua, "batch_add.lua", "Lua", "批量加购")
+        Component(toggle_lua, "toggle_select.lua", "Lua", "勾选切换")
+        Component(clear_lua, "clear_cart.lua", "Lua", "清空")
+    }
+
+    Container_Boundary(integration, "Integration & Jobs") {
+        Component(price_refresh, "PriceRefreshAdapter", "Java", "促销价签刷新")
+        Component(cleanup_job, "CartCleanupJob", "XXL-Job", "过期清理")
+        Component(event_pub, "EventPublisher", "RocketMQ", "购物车事件")
+    }
+}
+
+System_Ext(redis, "Redis Cluster", "Hash+ZSet 购物车数据")
+System_Ext(db, "OceanBase", "cart+cart_item 持久化")
+System_Ext(mq, "RocketMQ", "购物车事件")
+System_Ext(notification, "notification-service", "推送通知")
+
+Rel(user, buyer_api, "HTTP", "购物车操作")
+Rel(admin, admin_api, "HTTP", "管理员操作")
+Rel(buyer_api, cart_add, "调用")
+Rel(buyer_api, cart_query, "调用")
+Rel(buyer_api, cart_merge, "调用")
+Rel(admin_api, cleanup_job, "触发")
+Rel(cart_add, add_lua, "执行")
+Rel(cart_modify, modify_lua, "执行")
+Rel(cart_merge, merge_lua, "执行")
+Rel(cart_delete, delete_lua, "执行")
+Rel(cart_select, toggle_lua, "执行")
+Rel(cart_clear, clear_lua, "执行")
+Rel(add_lua, redis, "HGET/HSET/EXPIRE")
+Rel(merge_lua, redis, "HGETALL/HMSET/DEL")
+Rel(price_refresh, price, "Dubbo", "批量刷新价签")
+Rel(price_refresh, promotion, "Dubbo", "促销信息")
+Rel(price_refresh, member, "Dubbo", "会员价")
+Rel(price_refresh, inventory, "Dubbo", "库存状态")
+Rel(cart_query, price, "Dubbo", "价签展示")
+Rel(cleanup_job, redis, "扫描+删除过期购物车")
+Rel(cleanup_job, db, "写清理日志")
+Rel(price_refresh, mq, "发布事件")
+Rel(mq, notification, "消费事件")
+Rel(order, cart_query, "Dubbo", "下单获取 checked-items")
+
+SHOW_LEGEND()
+@enduml

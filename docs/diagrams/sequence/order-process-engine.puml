@@ -1,0 +1,162 @@
+@startuml
+title 可配置订单流程引擎执行时序（以实物订单为例）
+
+actor "买家" as buyer
+participant "IGW Buyer" as gw
+participant "workflow-service" as wf
+participant "ProcessEngine" as engine
+participant "ProcessTemplateRepo" as repo
+participant "OrderClassifier" as classifier
+participant "StrategyRegistry" as sr
+participant "HookDispatcher" as hd
+participant "SagaExecutor" as saga
+database "Apollo" as apollo
+database "SagaLog DB" as slog
+
+== 1. 订单提交 ==
+
+buyer -> gw: POST /api/v1/orders (商品 SKU + 购买属性)
+gw -> wf: 路由到 workflow-service
+wf -> engine: process(orderRequest)
+
+== 2. 订单分类 ==
+
+engine -> classifier: classify(orderRequest)
+activate classifier
+
+classifier -> classifier: 提取商品属性\n(itemType, saleType, bizAttributes)
+classifier -> apollo: 从 Apollo 加载分类规则\n(process.category)
+apollo --> classifier: 规则列表（SpEL 表达式）
+classifier -> classifier: 按顺序匹配规则\nPHYSICAL_GOODS+NORMAL → "physical"
+classifier --> engine: OrderCategory.physical
+deactivate classifier
+
+== 3. 模板加载 ==
+
+engine -> repo: getTemplate("physical_flow")
+activate repo
+
+repo -> apollo: 从 Apollo 加载模板 YAML\n(process.template)
+apollo --> repo: physical_flow YAML 定义
+repo -> repo: YAML 解析为\nProcessTemplate 对象
+repo --> engine: ProcessTemplate
+deactivate repo
+
+note right of engine
+  模板包含:
+  - 7 个步骤定义
+  - 4 个策略配置
+  - 2 个 Hook 事件
+end note
+
+== 4. 策略绑定 ==
+
+engine -> sr: resolve(physical, template.strategies)
+activate sr
+
+sr -> apollo: 从 Apollo 加载策略映射\n(如 split→by_warehouse)
+apollo --> sr: 策略实现 Bean 名
+sr -> sr: 从 Spring 容器获取\n策略实现实例
+sr --> engine: ProcessStrategies
+deactivate sr
+
+note right of engine
+  当前策略:
+  split=by_warehouse
+  merge=by_vendor
+  shipping=by_weight
+  invoice=by_amount
+end note
+
+== 5. 构建 Saga 定义 ==
+
+engine -> engine: buildSagaDefinition(template, strategies, hooks)
+note right of engine
+  步骤 0: resolveSplitStrategy(策略步骤)
+  步骤 1: validate
+  步骤 2: calculatePrice
+  步骤 3: applyPromotion
+  步骤 4: applyCoupon
+  步骤 5: reserveInventory
+  步骤 6: createOrder
+  步骤 7: requestPayment
+  Hook: after_payment → async
+  Hook: after_complete → async
+end note
+
+== 6. 执行 Saga ==
+
+engine -> saga: execute(sagaDefinition, context)
+activate saga
+
+saga -> slog: 创建 saga_instance (INITIATED)
+slog --> saga: saga_id
+
+== 7. 正向步骤执行 ==
+
+saga -> saga: step[0] resolveSplitStrategy
+saga -> saga: 执行拆单策略\n(by_warehouse → 拆为 2 组)
+note right of saga
+  拆单结果：
+  组1: warehouse_1 (3 件商品)
+  组2: warehouse_2 (1 件商品)
+end note
+
+saga -> saga: 为每组执行子流程
+
+loop 每组
+    saga -> saga: step[1] validate (OK)
+    saga -> saga: step[2] calculatePrice (含运费计算)
+    note right of saga
+      ShippingCostStrategy:
+      by_weight 计算运费
+    end note
+
+    saga -> saga: step[3] applyPromotion
+    saga -> saga: step[4] applyCoupon
+    saga -> saga: step[5] reserveInventory
+    saga -> saga: step[6] createOrder
+    saga -> saga: step[7] requestPayment
+
+    saga -> slog: 更新 step_log (SUCCESS)
+end
+
+saga -> slog: 更新 saga_instance (COMPLETED || PAID)
+
+== 8. 扩展点触发 ==
+
+alt after_payment Hook
+    saga -> hd: dispatch("after_payment", hookContext)
+    activate hd
+
+    hd -> hd: pointsGrantHandler(order:1, async)
+    note right of hd
+      条件: totalAmount >= 100
+      当前金额 299 → 满足 → 执行
+    end note
+
+    group 异步 MQ
+        hd -> hd: pointsGrantHandler\n发送积分赠送 MQ 消息
+        hd -> hd: firstOrderCouponIssuer(异步)\n如果是首单 → 发放优惠券
+    end
+
+    hd --> saga: Hook 调度完成
+    deactivate hd
+end
+
+alt after_complete Hook
+    saga -> hd: dispatch("after_complete", hookContext)
+    activate hd
+    hd -> hd: crmSyncHandler(异步)
+    hd --> saga: Hook 调度完成
+    deactivate hd
+end
+
+== 9. 返回结果 ==
+
+saga --> engine: SagaResult.success(orderNo)
+engine --> wf: OrderProcessResult
+wf --> gw: HTTP 201 (订单创建成功)
+gw --> buyer: 响应订单信息
+
+@enduml

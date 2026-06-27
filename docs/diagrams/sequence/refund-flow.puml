@@ -1,0 +1,83 @@
+@startuml
+title 售后退款流程（含审核 + 补偿）
+
+actor "买家" as buyer
+actor "客服" as cs
+participant "aftersale-service" as aftersale
+participant "workflow-service" as wf
+participant "order-core" as order
+participant "payment-service" as payment
+participant "inventory-service" as inv
+queue "RocketMQ" as mq
+participant "财务系统" as finance
+actor "payment_gw" as payment_gw
+participant "notify" as notify
+participant "coupon-service" as coupon
+
+== 退款申请 ==
+buyer -> aftersale: 申请退款 (订单ID + 原因)
+activate aftersale
+aftersale -> aftersale: 校验售后时效
+aftersale -> aftersale: 校验订单状态（是否可退）
+aftersale -> aftersale: 校验退款金额上限
+
+alt 自动审核通过（满足系统规则）
+    aftersale -> wf: 启动退款 Saga
+    activate wf
+
+    wf -> order: Step 1: 状态更新 PAID → REFUNDING
+    activate order
+    order -> order: 状态机迁移
+    order --> wf: 成功
+    deactivate order
+
+    wf -> inv: Step 2: 释放库存
+    activate inv
+    inv -> inv: 回滚库存预占/扣减
+    inv --> wf: 成功
+    deactivate inv
+
+    wf -> coupon: Step 3: 释放优惠券
+    activate coupon
+    coupon -> coupon: 回滚优惠券占用
+    coupon --> wf: 成功
+    deactivate coupon
+
+    wf -> payment: Step 4: 发起退款（原路返回）
+    activate payment
+    payment -> payment_gw: 退款请求 (支付宝/微信)
+    payment_gw -> payment: 退款成功回调
+    payment --> wf: 成功
+    deactivate payment
+
+    wf -> order: Step 5: 状态更新 REFUNDING → REFUNDED
+    activate order
+    order -> order: 状态机迁移
+    order --> wf: 成功
+    deactivate order
+
+    wf -> finance: Step 6: 推送退款结算数据
+    finance --> wf: 成功
+
+    order -> mq: 发布 OrderRefundedEvent
+    mq -> notify: 发送退款成功通知
+
+    wf --> aftersale: 退款完成
+    aftersale --> buyer: 退款成功
+
+    deactivate wf
+
+else 需要人工审核
+    aftersale -> cs: 生成退款审核任务
+    note right: 客服工作台待处理
+
+    cs -> aftersale: 审核通过 / 拒绝
+    alt 审核通过
+        aftersale -> wf: 启动退款 Saga（同自动审核流程）
+    else 审核拒绝
+        aftersale --> buyer: 拒绝退款 + 原因
+    end
+end
+deactivate aftersale
+
+@enduml

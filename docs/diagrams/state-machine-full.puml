@@ -1,0 +1,112 @@
+@startuml 订单全生命周期状态机（13 态）
+skinparam {
+    BackgroundColor #FEFEFE
+    BorderColor #555555
+    State {
+        BackgroundColor #E8F5E9
+        BorderColor #2E7D32
+    }
+}
+
+title 订单全生命周期状态机（13 态）
+
+' ====== 正向流转（绿色） ======
+state "PENDING_PAY\n待支付" as PENDING_PAY #E8F5E9
+state "PAID\n已支付" as PAID #E8F5E9
+state "TO_SHIP\n待发货" as TO_SHIP #E8F5E9
+state "SHIPPED\n已发货" as SHIPPED #E8F5E9
+state "DELIVERED\n已签收" as DELIVERED #E8F5E9
+state "COMPLETED\n已完成" as COMPLETED #A5D6A7
+
+' ====== 逆向流转（红色） ======
+state "CANCELLED\n已取消" as CANCELLED #FFCDD2
+state "CLOSED\n超时关闭" as CLOSED #FFCDD2
+
+' ====== 退款/退货（橙色） ======
+state "REFUNDING\n退款中" as REFUNDING #FFE0B2
+state "RETURNING\n退货中" as RETURNING #FFE0B2
+state "REFUNDED\n已退款" as REFUNDED #FFCC80
+
+' ====== 异常/干预（紫色） ======
+state "HOLD\n挂起" as HOLD #CE93D8
+state "FROZEN\n冻结" as FROZEN #B39DDB
+
+' ====== 转换定义 ======
+
+' --- 正向流转路径 ---
+PENDING_PAY --> PAID : 支付成功\n(支付回调 → PaymentProcessService)
+PAID --> TO_SHIP : 确认发货\n(商家操作)
+TO_SHIP --> SHIPPED : 发货\n(物流系统回调)
+SHIPPED --> DELIVERED : 确认收货\n(买家确认 / 自动确认)
+DELIVERED --> COMPLETED : 自动完成\n(7天超时)
+
+' --- 逆向终态 ---
+PENDING_PAY --> CANCELLED : 取消\n(买家取消)
+PENDING_PAY --> CLOSED : 超时关闭\n(30min 未支付)
+PAID --> CANCELLED : 取消\n(商家/客服取消)
+
+' --- 退款/退货 ---
+PAID --> REFUNDING : 申请退款\n(未发货仅退款)
+TO_SHIP --> REFUNDING : 申请退款\n(未发货仅退款)
+TO_SHIP --> RETURNING : 申请退货\n(发货后退货)
+SHIPPED --> RETURNING : 申请退货\n(已发货退货)
+DELIVERED --> RETURNING : 申请退货\n(已签收退货)
+COMPLETED --> RETURNING : 售后申请\n(完成后售后退货)
+
+REFUNDING --> REFUNDED : 退款完成
+RETURNING --> REFUNDED : 退货退款完成
+
+' --- 挂起/恢复 ---
+PENDING_PAY --> HOLD : 库存不足/风控
+PAID --> HOLD : 库存不足/风控
+HOLD --> PENDING_PAY : 库存补充/解除挂起
+HOLD --> PAID : 库存补充（已支付场景）
+HOLD --> CANCELLED : 放弃订单
+
+' --- 冻结/解冻（所有非终态均可冻结） ---
+PENDING_PAY --> FROZEN : 人工冻结
+PAID --> FROZEN : 人工冻结
+TO_SHIP --> FROZEN : 人工冻结
+SHIPPED --> FROZEN : 人工冻结
+DELIVERED --> FROZEN : 人工冻结
+REFUNDING --> FROZEN : 人工冻结
+RETURNING --> FROZEN : 人工冻结
+HOLD --> FROZEN : 人工冻结
+COMPLETED --> FROZEN : 人工冻结（极少场景）
+
+FROZEN --> PENDING_PAY : 解冻
+FROZEN --> PAID : 解冻
+FROZEN --> TO_SHIP : 解冻
+FROZEN --> SHIPPED : 解冻
+FROZEN --> DELIVERED : 解冻
+FROZEN --> CANCELLED : 解冻并取消
+FROZEN --> HOLD : 解冻（恢复挂起）
+FROZEN --> REFUNDING : 解冻
+FROZEN --> RETURNING : 解冻
+
+' ====== 状态分组说明 ======
+
+note top of PENDING_PAY #FEFEFE
+  **正向流转**: PENDING_PAY → PAID → TO_SHIP → SHIPPED → DELIVERED → COMPLETED
+  **逆向终态**: CANCELLED（取消）/ CLOSED（超时）
+  **退款/退货**: REFUNDING（仅退款）/ RETURNING（退货后退款）→ REFUNDED
+  **异常态**: HOLD（挂起）/ FROZEN（冻结）
+end note
+
+note bottom of COMPLETED #A5D6A7
+  终态 — 只读
+end note
+
+note bottom of CANCELLED #FFCDD2
+  终态 — 只读
+end note
+
+note bottom of CLOSED #FFCDD2
+  终态 — 只读
+end note
+
+note bottom of REFUNDED #FFCC80
+  终态 — 只读
+end note
+
+@enduml

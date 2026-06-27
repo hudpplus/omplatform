@@ -1,0 +1,54 @@
+@startuml
+title 购物车匿名→登录合并流程 (Cart Merge Sequence)
+
+actor User as "买家"
+participant APP as "APP/Web"
+participant CartAPI as "Cart API"
+participant CartMergeSvc as "CartMergeService"
+participant LuaEngine as "Redis Lua Engine"
+participant Redis as "Redis Cluster"
+participant EventPub as "EventPublisher"
+
+== 用户未登录, 加购 ==
+User -> APP: 浏览商品, 加购
+APP -> CartAPI: POST /api/v1/cart/items (deviceId, skuId, qty)
+CartAPI -> LuaEngine: add_item.lua (anon_cart_id, sku, qty)
+LuaEngine -> Redis: HSET cart:anon:{id}:items
+LuaEngine -> Redis: ZADD cart:anon:{id}:sorted_set
+Redis --> LuaEngine: success
+LuaEngine --> CartAPI: {code:200}
+CartAPI --> APP: 加购成功
+APP --> User: 购物车已更新
+
+== 用户登录, 触发合并 ==
+User -> APP: 登录
+APP -> CartAPI: POST /api/v1/cart/login (userId, deviceId)
+CartAPI -> CartMergeSvc: merge(anonCartId, userCartId)
+
+CartMergeSvc -> LuaEngine: merge_cart.lua (source=anon, target=user)
+LuaEngine -> Redis: HGETALL cart:anon:{id}:items
+Redis --> LuaEngine: 购物车行列表
+
+loop 每行
+    LuaEngine -> Redis: HEXISTS cart:user:{id}:items (sku:activity)
+    alt 已存在同 SKU+活动
+        LuaEngine -> Redis: 合并数量
+    else 新 SKU
+        LuaEngine -> Redis: HSET + ZADD
+    end
+end
+
+LuaEngine -> Redis: DEL cart:anon:{id}:items
+LuaEngine -> Redis: DEL cart:anon:{id}:sorted_set
+LuaEngine -> Redis: DEL cart:anon:{deviceId}
+Redis --> LuaEngine: 合并完成
+
+LuaEngine --> CartMergeSvc: {code:200, merged_count}
+CartMergeSvc -> EventPub: publish cart.merged (userId, merged_count)
+EventPub -> Redis: 通知推送
+
+CartMergeSvc --> CartAPI: 合并成功
+CartAPI --> APP: 登录成功, 购物车已合并
+APP --> User: 购物车已同步 (数量:N)
+
+@enduml

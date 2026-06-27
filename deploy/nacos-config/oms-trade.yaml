@@ -1,0 +1,160 @@
+# oms-trade 专属配置（ADR-017 多业务线 ShardingSphere）
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/oms_trade?useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+  shardingsphere:
+    datasource:
+      names: ecommerce_ds_0,ecommerce_ds_1,ecommerce_ds_2,ecommerce_ds_3,ecommerce_ds_4,ecommerce_ds_5,ecommerce_ds_6,ecommerce_ds_7,locallife_ds_0,locallife_ds_1,b2b_ds_0
+      ecommerce_ds_0:
+        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_0
+        username: root
+        password: root
+      ecommerce_ds_1:
+        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_1
+        username: root
+        password: root
+      ecommerce_ds_2:
+        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_2
+        username: root
+        password: root
+      ecommerce_ds_3:
+        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_3
+        username: root
+        password: root
+      ecommerce_ds_4:
+        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_4
+        username: root
+        password: root
+      ecommerce_ds_5:
+        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_5
+        username: root
+        password: root
+      ecommerce_ds_6:
+        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_6
+        username: root
+        password: root
+      ecommerce_ds_7:
+        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_7
+        username: root
+        password: root
+      locallife_ds_0:
+        url: jdbc:mysql://localhost:3306/oms_trade_locallife_0
+        username: root
+        password: root
+      locallife_ds_1:
+        url: jdbc:mysql://localhost:3306/oms_trade_locallife_1
+        username: root
+        password: root
+      b2b_ds_0:
+        url: jdbc:mysql://localhost:3306/oms_trade_b2b_0
+        username: root
+        password: root
+    rules:
+      sharding:
+        tables:
+          # === 电商 (8 库 × 8 表) ===
+          order_ecommerce:
+            actual-data-nodes: ecommerce_ds_$->{0..7}.order_ecommerce_$->{0..7}
+            database-strategy:
+              standard:
+                sharding-column: buyer_id
+                sharding-algorithm-name: business_db
+            table-strategy:
+              standard:
+                sharding-column: buyer_id
+                sharding-algorithm-name: business_table
+          order_ecommerce_ext:
+            actual-data-nodes: ecommerce_ds_$->{0..7}.order_ecommerce_ext_$->{0..7}
+            database-strategy:
+              standard:
+                sharding-column: order_no
+                sharding-algorithm-name: business_db
+            table-strategy:
+              standard:
+                sharding-column: order_no
+                sharding-algorithm-name: business_table
+          order_items:
+            actual-data-nodes: ecommerce_ds_$->{0..7}.order_items_$->{0..7}
+            database-strategy:
+              standard:
+                sharding-column: order_no
+                sharding-algorithm-name: business_db
+            table-strategy:
+              standard:
+                sharding-column: order_no
+                sharding-algorithm-name: business_table
+          # === 本地生活 (2 库 × 8 表) ===
+          order_locallife:
+            actual-data-nodes: locallife_ds_$->{0..1}.order_locallife_$->{0..7}
+            database-strategy:
+              standard:
+                sharding-column: buyer_id
+                sharding-algorithm-name: business_db
+            table-strategy:
+              standard:
+                sharding-column: buyer_id
+                sharding-algorithm-name: business_table
+          order_locallife_ext:
+            actual-data-nodes: locallife_ds_$->{0..1}.order_locallife_ext_$->{0..7}
+            database-strategy:
+              standard:
+                sharding-column: order_no
+                sharding-algorithm-name: business_db
+            table-strategy:
+              standard:
+                sharding-column: order_no
+                sharding-algorithm-name: business_table
+          # === B2B (1 库 × 4 表) ===
+          order_b2b:
+            actual-data-nodes: b2b_ds_0.order_b2b_$->{0..3}
+            table-strategy:
+              standard:
+                sharding-column: company_id
+                sharding-algorithm-name: business_table
+          order_b2b_ext:
+            actual-data-nodes: b2b_ds_0.order_b2b_ext_$->{0..3}
+            table-strategy:
+              standard:
+                sharding-column: order_no
+                sharding-algorithm-name: business_table
+        binding-tables:
+          - order_ecommerce,order_ecommerce_ext,order_items
+          - order_locallife,order_locallife_ext
+          - order_b2b,order_b2b_ext
+        sharding-algorithms:
+          business_db:
+            type: CLASS_BASED
+            props:
+              strategy: standard
+              algorithmClassName: com.omplatform.trade.sharding.BusinessDbShardingAlgorithm
+          business_table:
+            type: CLASS_BASED
+            props:
+              strategy: standard
+              algorithmClassName: com.omplatform.trade.sharding.OrderShardingAlgorithm
+
+# 卡单检测超时配置
+stuck-order:
+  timeout-minutes:
+    PENDING_PAY: 30
+    SHIPPED: 10080
+    HOLD: 2880
+    REFUNDING: 1440
+    RETURNING: 1440
+
+# ADR-017 Phase 3：迁移配置（覆盖本地默认值）
+legacy:
+  datasource:
+    url: jdbc:mysql://localhost:3306/oms_trade?useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+omplatform:
+  migration:
+    dual-write:
+      enabled: false
+    read-router: shardingsphere
+    write-router: shardingsphere

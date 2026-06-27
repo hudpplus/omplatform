@@ -1,0 +1,86 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title 营销价格服务组件架构 (Price / Promotion / Coupon Component Diagram)
+
+Person(user, "买家", "APP/WEB 用户")
+Person(admin, "运营/营销", "促销/券管理端")
+
+System_Ext(order_core, "order-core", "订单核心(ADR-039)")
+System_Ext(cart, "cart-service", "购物车(ADR-044)")
+System_Ext(member, "member-service", "会员服务(ADR-046)")
+System_Ext(inventory, "inventory-service", "库存(ADR-043)")
+
+System_Boundary(price, "price-service") {
+    Container(pricing_pipeline, "Pricing Pipeline", "Spring Boot", "计价管道: basic→member→promotion→coupon→shipping→tax")
+    Component(basic_pricer, "BasicPricer", "Java", "基础价/渠道价")
+    Component(member_pricer, "MemberPricer", "Java", "会员价(调用member-service)")
+    Component(promo_pricer, "PromoPricer", "Java", "促销折扣计算")
+    Component(cpn_pricer, "CouponPricer", "Java", "券优惠计算")
+    Component(shipping_pricer, "ShippingPricer", "Java", "运费+VIF免运费判定")
+    Component(tax_pricer, "TaxPricer", "Java", "税费")
+}
+
+System_Boundary(promotion, "promotion-service") {
+    Container(rule_engine, "PromotionRuleEngine", "Spring Boot", "职责链+SpEL")
+    Component(definition_mgr, "PromotionDefinitionMgr", "Java", "促销定义CRUD")
+    Component(full_reduce, "FullReduceHandler", "Java", "满减/满折")
+    Component(discount, "DiscountHandler", "Java", "折扣")
+    Component(group_buy, "GroupBuyHandler", "Java", "拼团")
+    Component(flash, "FlashSaleHandler", "Java", "秒杀")
+    Component(stacking, "StackingRuleChain", "Java", "叠加互斥判定")
+}
+
+System_Boundary(coupon, "coupon-service") {
+    Container(cpn_mgr, "CouponLifecycleManager", "Spring Boot", "券模板+实例+状态机")
+    Component(cpn_template, "CouponTemplateMgr", "Java", "券模板CRUD")
+    Component(cpn_instance, "CouponInstanceMgr", "Java", "券实例状态管理")
+    Component(cpn_lock, "CouponLockService", "Java", "下单锁券(幂等)")
+    Component(cpn_use, "CouponUseService", "Java", "支付核销(幂等)")
+    Component(cpn_release, "CouponReleaseService", "Java", "释放/回退(幂等)")
+    Component(cpn_rollback, "CouponRollbackService", "Java", "退款回退(幂等)")
+}
+
+System_Ext(redis, "Redis Cache L2", "促销/券缓存")
+System_Ext(db, "OceanBase", "8张表: promotion/coupon/price")
+System_Ext(apollo, "Apollo", "管道顺序/叠加规则/阈值配置")
+System_Ext(mq, "RocketMQ", "计价/促销/券事件")
+
+Rel(user, pricing_pipeline, "HTTP", "计价请求")
+Rel(user, definition_mgr, "HTTP", "查询促销")
+Rel(user, cpn_mgr, "HTTP", "领券/我的券")
+Rel(admin, definition_mgr, "HTTP", "促销CRUD")
+Rel(admin, cpn_template, "HTTP", "券模板CRUD")
+Rel(pricing_pipeline, basic_pricer, "Step 1")
+Rel(pricing_pipeline, member_pricer, "Step 2")
+Rel(member_pricer, member, "Dubbo", "查等级折扣")
+Rel(pricing_pipeline, promo_pricer, "Step 3")
+Rel(promo_pricer, rule_engine, "调用")
+Rel(rule_engine, stacking, "叠加判定")
+Rel(rule_engine, full_reduce, "匹配")
+Rel(rule_engine, discount, "匹配")
+Rel(rule_engine, group_buy, "匹配")
+Rel(rule_engine, flash, "匹配")
+Rel(pricing_pipeline, cpn_pricer, "Step 4")
+Rel(cpn_pricer, cpn_mgr, "Dubbo", "查券优惠")
+Rel(cpn_lock, cpn_mgr, "lock")
+Rel(cpn_use, cpn_mgr, "use")
+Rel(cpn_release, cpn_mgr, "release")
+Rel(cpn_rollback, cpn_mgr, "rollback")
+Rel(pricing_pipeline, shipping_pricer, "Step 5")
+Rel(pricing_pipeline, tax_pricer, "Step 6")
+Rel(pricing_pipeline, redis, "缓存")
+Rel(rule_engine, redis, "缓存促销定义")
+Rel(rule_engine, apollo, "叠加规则配置")
+Rel(cpn_mgr, apollo, "阈值配置")
+Rel(pricing_pipeline, mq, "发 price.calculated")
+Rel(rule_engine, mq, "发 promotion.effective")
+Rel(cpn_mgr, mq, "发券事件")
+Rel(order_core, pricing_pipeline, "Dubbo", "Saga计价步骤")
+Rel(order_core, cpn_mgr, "Dubbo", "Saga锁券/用券/释放")
+Rel(cart, pricing_pipeline, "Dubbo", "价签刷新")
+
+SHOW_LEGEND()
+@enduml

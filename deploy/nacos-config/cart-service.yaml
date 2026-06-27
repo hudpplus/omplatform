@@ -1,0 +1,13 @@
+# cart-service 专属配置
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/oms_cart?useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+
+# 购物车 TTL 配置
+cart:
+  anon:
+    ttl-days: 30
+  batch:
+    refresh-interval-ms: 60000

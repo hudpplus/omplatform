@@ -1,0 +1,147 @@
+@startuml 订单拆分与合并流程
+!include <C4/C4_Container>
+
+skinparam participant {
+    BackgroundColor #FEFEFE
+    BorderColor #555555
+}
+
+' Colors
+!define SERVICE_COLOR #E8F5E9
+!define ENGINE_COLOR #E3F2FD
+!define DB_COLOR #F3E5F5
+
+title 订单拆分与合并 — 原子服务时序
+
+' ========== 拆分流程 ==========
+
+== 阶段 1：订单拆分 ==
+
+actor "流程引擎\n(ProcessEngine)" as ProcessEngine #SERVICE_COLOR
+participant "拆单服务\n(OrderSplitService)" as SplitService #SERVICE_COLOR
+participant "拆分策略\n(SplitStrategy)" as Strategy #SERVICE_COLOR
+participant "状态机引擎\n(StateMachineEngine)" as Engine #ENGINE_COLOR
+database "订单DB\n(order)" as OrderDB #DB_COLOR
+database "子订单DB\n(sub_order)" as SubOrderDB #DB_COLOR
+
+ProcessEngine -> SplitService: splitOrder(parentOrderId, strategy)
+activate SplitService
+
+note right #FEFEFE
+  触发时机：流程引擎 Step 0
+  策略来源：Apollo process.strategy
+  by_warehouse / by_vendor / by_item
+end note
+
+SplitService -> Strategy: resolve(parentOrderId)
+activate Strategy
+
+Strategy -> Strategy: 按仓库/供应商/品类分组
+Strategy --> SplitService: SplitPlan(3 groups)
+deactivate Strategy
+
+SplitService -> SplitService: 前置校验
+note right #FEFEFE
+  • 拆分量 ≤ 5个子订单
+  • 所有订单行可拆分
+  • 金额分摊验证
+end note
+
+loop 为每个拆分组的创建子订单
+    SplitService -> Engine: transition(childOrderId, null, PENDING_PAY, ctx)
+    activate Engine
+    Engine --> SplitService: ✅ PENDING_PAY
+    deactivate Engine
+
+    SplitService -> SubOrderDB: INSERT sub_order\n(parentOrderNo, items, amount)
+    activate SubOrderDB
+    SubOrderDB --> SplitService: ✅
+    deactivate SubOrderDB
+
+    note right #FEFEFE
+      子订单：
+      • 独立 orderNo（id-generator）
+      • 继承父订单的 buyer/address
+      • 独立状态机实例
+      • amount = 分摊后金额
+    end note
+end
+
+SplitService -> OrderDB: UPDATE parent_order\nstatus=SPLIT_STATUS, child_ids=[...]
+activate OrderDB
+OrderDB --> SplitService: ✅
+deactivate OrderDB
+
+SplitService --> ProcessEngine: ✅ [childOrderNo1, childOrderNo2, ...]
+deactivate SplitService
+
+note right #FEFEFE
+  父订单标记为已拆分：
+  • status 不变（保持 PENDING_PAY）
+  • child_order_nos 记录子列表
+  • buyer/operator 所见仍是父订单
+  • 子订单用于后续独立流转（发货/退款）
+end note
+
+' ========== 合并流程 ==========
+
+== 阶段 2：订单合并 ==
+
+actor "XXL-Job\n(定时调度)" as XxlJob #SERVICE_COLOR
+participant "合单服务\n(OrderMergeService)" as MergeService #SERVICE_COLOR
+
+XxlJob -> MergeService: mergeOrders(candidateOrderIds)
+activate MergeService
+
+note right #FEFEFE
+  触发：XXL-Job 每 30 分钟
+  条件：同一买家 + 同一店铺
+        + 状态均为 PAID
+        + 目标订单可合并
+  策略：by_vendor（同店合并）
+        no_merge（不合并）
+end note
+
+MergeService -> MergeService: 前置校验
+note right #FEFEFE
+  • 所有订单状态 = PAID
+  • 相同 buyer_id
+  • 相同 shop_id
+  • 合并后金额校验
+end note
+
+MergeService -> MergeService: 选定目标订单（最早创建的）
+MergeService -> OrderDB: 合并订单行到目标订单
+activate OrderDB
+OrderDB --> MergeService: ✅
+deactivate OrderDB
+
+loop 关闭源订单（除目标订单外）
+    MergeService -> Engine: transition(sourceOrder, PAID, CANCELLED, '合并')
+    activate Engine
+    Engine --> MergeService: ✅ CANCELLED
+    deactivate Engine
+
+    MergeService -> OrderDB: UPDATE source_order\nmerge_to=targetOrderNo
+    activate OrderDB
+    OrderDB --> MergeService: ✅
+    deactivate OrderDB
+end
+
+MergeService -> OrderDB: UPDATE target_order\nmerge_from=[sources], adjust_freight
+activate OrderDB
+OrderDB --> MergeService: ✅
+deactivate OrderDB
+
+note right #FEFEFE
+  合并后：
+  • 目标订单：状态保持 PAID
+  • 源订单：标记为 CANCELLED + merge_to
+  • 运费：重新计算（合并运费减免）
+  • buyer 查询仅看到目标订单
+end note
+
+MergeService --> XxlJob: ✅ mergedCount=2
+deactivate MergeService
+
+@enduml

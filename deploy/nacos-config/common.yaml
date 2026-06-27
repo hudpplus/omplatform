@@ -1,0 +1,43 @@
+# OM Platform — Nacos 共享配置（common.yaml）
+# 导入方式：Nacos 控制台 → 配置管理 → 导入 → 选择此目录
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 5000
+      max-lifetime: 600000
+
+  data:
+    redis:
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 4
+
+dubbo:
+  consumer:
+    timeout: 5000
+    retries: 0
+  provider:
+    timeout: 5000
+    retries: 0
+
+rocketmq:
+  producer:
+    send-message-timeout: 3000
+    retry-times-when-send-failed: 2
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0

@@ -1,0 +1,64 @@
+@startuml
+title 支付回调流程（含幂等 + 库存扣减）
+
+actor "支付网关\n(支付宝/微信)" as paygw
+participant "payment-core" as payment
+participant "order-core" as order
+participant "workflow-service\n(Saga Orchestrator)" as wf
+participant "inventory-service" as inv
+participant "logistics-service" as logistics
+queue "RocketMQ" as mq
+participant "user-center" as uc
+note left of uc: 双协议：MQ（异步事件）\n+ Dubbo/mTLS（同步RPC）
+participant "通知服务" as notify
+
+' ADR-020 CreateOrderSagaDefinition Step 3 (chargePayment) 由 payment-service
+' 在接收支付回调时调用三方网关执行；Step 4 (confirmOrder) 映射为 order.paySuccess。
+' 本图展示回调触发后的编排。详见 saga-orchestration.puml "支付成功 Saga"。
+
+== 支付回调 ==
+paygw -> payment: POST 异步回调 (signature + transaction_id)
+activate payment
+payment -> payment: 验签 (RSA256)
+payment -> payment: 幂等校验 (payment_transaction_id 唯一索引)
+
+alt 已处理过的回调（幂等）
+    payment --> paygw: HTTP 200 (已处理，忽略)
+else 首次回调
+    payment -> order: 支付成功通知 (Dubbo: paySuccess)
+    activate order
+    order -> order: 状态机 PENDING_PAY → PAID
+    order -> order: 更新实际支付金额 + 支付时间
+    order --> payment: 成功
+    deactivate order
+
+    payment -> wf: 触发支付成功Saga编排
+    activate wf
+
+    wf -> inv: 确认扣减库存 (confirmDeduct)
+    activate inv
+    inv -> inv: Redis 预占转正式扣减
+    inv --> wf: 成功
+    deactivate inv
+
+    wf -> logistics: 创建发货单
+    activate logistics
+    logistics -> logistics: 生成发货单（待发货状态）
+    logistics --> wf: 成功
+    deactivate logistics
+
+    wf -> mq: 发布 OrderPaidEvent
+    deactivate wf
+
+    == 异步处理（并行）==
+    par 异步同步
+        mq -> es: 同步 ES 支付状态 (Canal)
+        mq -> uc: 发放积分/成长值
+        mq -> notify: 发送支付成功通知
+    end
+
+    payment --> paygw: HTTP 200 (处理成功)
+end
+deactivate payment
+
+@enduml

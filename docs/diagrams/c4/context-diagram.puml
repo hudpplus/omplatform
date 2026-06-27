@@ -1,0 +1,52 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title 系统上下文图 — 订单中台 (Level 1)
+
+LAYOUT_WITH_LEGEND()
+
+Person(buyer, "买家", "通过 APP / 小程序 / Web 下单和查看订单")
+Person(seller, "商家", "管理店铺订单、发货、售后")
+Person(operator, "平台运营", "运营后台管理、数据分析、活动配置")
+
+System(omp, "订单中台", "统一的订单能力中心，支撑多业务线订单全生命周期管理")
+
+System_Ext(user_center, "用户中心", "用户认证、账户信息")
+System_Ext(product_center, "商品中心", "商品/SKU信息、库存查询")
+System_Ext(seller_center, "商家中心", "商家入驻、店铺管理")
+System_Ext(risk_control, "风控系统", "订单风控审核、反欺诈")
+System_Ext(finance, "财务系统", "结算、对账、发票")
+System_Ext(payment_channel, "三方支付", "支付宝 / 微信 / 银行卡")
+System_Ext(logistics_provider, "物流商", "顺丰 / 菜鸟 / 京东物流")
+System_Ext(open_api, "开放平台", "第三方开发者接入")
+
+' === 外部销售渠道（全渠道接入） ===
+System_Ext(tmall, "天猫", "电商平台，订单 Webhook")
+System_Ext(jd, "京东", "电商平台，订单 Webhook")
+System_Ext(pdd, "拼多多", "电商平台，定时拉取订单")
+System_Ext(douyin, "抖音", "内容电商，订单 Webhook")
+System_Ext(wechat, "微信小程序", "社交电商，订单 Webhook")
+System_Ext(pos, "线下POS", "门店系统，定时拉取订单")
+
+Rel(buyer, omp, "下单、查询、退款", "HTTPS")
+Rel(seller, omp, "订单管理、发货", "HTTPS")
+Rel(operator, omp, "运营管理、数据看板", "HTTPS")
+Rel(omp, user_center, "获取用户信息", "Dubbo/mTLS")
+Rel(omp, product_center, "获取商品信息", "Dubbo/mTLS")
+Rel(omp, seller_center, "获取商家信息", "Dubbo/mTLS")
+Rel(omp, risk_control, "风控审核", "Dubbo/mTLS")
+Rel(omp, finance, "推送结算数据", "MQ")
+Rel(omp, payment_channel, "发起支付/退款", "HTTPS")
+Rel(omp, logistics_provider, "发货/物流追踪", "HTTPS")
+Rel(open_api, omp, "订单查询/创建", "HTTPS 签名")
+
+' === 渠道 → 中台关系 ===
+Rel(tmall, omp, "推送订单/Trade", "HTTPS Webhook")
+Rel(jd, omp, "推送订单", "HTTPS Webhook")
+Rel(pdd, omp, "查询订单", "HTTPS Signature")
+Rel(douyin, omp, "推送订单", "HTTPS Webhook")
+Rel(wechat, omp, "推送订单", "HTTPS Webhook")
+Rel(pos, omp, "推送订单数据", "HTTPS API")
+
+SHOW_LEGEND()
+@enduml

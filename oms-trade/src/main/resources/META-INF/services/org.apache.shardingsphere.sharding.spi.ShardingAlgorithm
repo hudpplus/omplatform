@@ -1,0 +1,2 @@
+# ShardingSphere SPI — 自定义分片算法
+com.omplatform.trade.sharding.OrderShardingAlgorithm

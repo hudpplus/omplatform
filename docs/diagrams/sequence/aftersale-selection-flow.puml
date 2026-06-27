@@ -1,0 +1,77 @@
+@startuml
+title 售后类型分流决策流程（含审核规则引擎）
+
+actor "买家" as buyer
+participant "aftersale-service" as aftersale
+participant "AuditRuleEngine" as engine
+participant "workflow-service" as wf
+participant "外部系统" as external
+database "MySQL" as db
+queue "RocketMQ" as mq
+
+== 入口：售后统一入口 ==
+
+buyer -> aftersale: POST /v1/aftersales/{type}
+note right
+    type 可选:
+    REFUND_ONLY | RETURN_REFUND | EXCHANGE
+end note
+
+activate aftersale
+
+aftersale -> aftersale: 校验 1: 订单是否存在
+aftersale -> aftersale: 校验 2: 订单状态是否可售后
+note right
+    REFUND_ONLY:  PAID/TO_SHIP 可申请
+    RETURN_REFUND: SHIPPED/DELIVERED/COMPLETED 可申请
+    EXCHANGE:     SHIPPED/DELIVERED 可申请
+end note
+
+alt 校验失败
+    aftersale --> buyer: 4xxx 错误码 + 原因
+    deactivate aftersale
+    end
+end
+
+aftersale -> aftersale: 校验 3: 售后服务次数未超限（Apollo 可配）
+aftersale -> aftersale: 校验 4: 退款金额在合理范围
+
+== 审核规则判定 ==
+aftersale -> engine: evaluate(aftersale_order)
+
+engine -> engine: 按 priority 遍历规则
+alt 匹配到 AUTO_APPROVE
+    engine --> aftersale: { action: AUTO_APPROVE, rule: "小额自动通过" }
+    aftersale -> aftersale: 创建 aftersale_order (APPROVED)
+else 匹配到 AUTO_REJECT
+    engine --> aftersale: { action: AUTO_REJECT, reason: "高风险" }
+    aftersale -> aftersale: 创建 aftersale_order (REJECTED)
+    aftersale --> buyer: 售后申请被拒绝
+    deactivate aftersale
+    end
+else 默认 MANUAL_REVIEW
+    engine --> aftersale: { action: MANUAL_REVIEW }
+    aftersale -> aftersale: 创建 aftersale_order (AUDITING)
+    aftersale -> external: 客服工单系统
+    aftersale --> buyer: 售后申请提交成功，等待审核
+    deactivate aftersale
+    end
+end
+
+== 售后类型分发 ==
+alt REFUND_ONLY
+    aftersale -> wf: 启动 refund Saga
+else RETURN_REFUND
+    aftersale -> aftersale: 生成退货地址
+    aftersale --> buyer: 请在 7d 内寄回商品
+else EXCHANGE
+    aftersale -> aftersale: 校验 SKU 可换
+    aftersale -> aftersale: 生成退货地址 + 新 SKU 信息
+    aftersale --> buyer: 请在 7d 内寄回旧货
+end
+
+aftersale -> mq: 发布 aftersale.created
+
+deactivate aftersale
+
+@enduml

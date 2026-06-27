@@ -1,0 +1,30 @@
+version: '3.7'
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: examples
+    ports:
+      - "3306:3306"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+  seata-server:
+    image: seataio/seata-server:2.3.0
+    environment:
+      - SEATA_SERVER_PORT=8091
+    ports:
+      - "8091:8091"
+    depends_on:
+      - mysql
+
+  # Optional: nacos for config/registry
+  nacos:
+    image: nacos/nacos-server:2.2.3
+    environment:
+      - MODE=standalone
+    ports:
+      - "8848:8848"
+    depends_on:
+      - mysql
+

@@ -1,0 +1,18 @@
+# oms-finance 专属配置
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/oms_finance?useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: root
+
+# 支付渠道配置
+payment:
+  alipay:
+    app-id: 2021000000000000
+    private-key: classpath:cert/alipay-private.key
+    alipay-public-key: classpath:cert/alipay-public.key
+    gateway: https://openapi.alipay.com/gateway.do
+  wechat:
+    app-id: wx0000000000000000
+    mch-id: 10000000
+    api-key: classpath:cert/wechat-apiclient.key

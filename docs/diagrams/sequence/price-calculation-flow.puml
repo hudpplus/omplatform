@@ -1,0 +1,62 @@
+@startuml
+title 计价管道计算流程 (Price Calculation Pipeline)
+
+actor User as "买家"
+participant OrderCore as "order-core"
+participant PriceSvc as "price-service"
+participant MemberSvc as "member-service\n(ADR-046)"
+participant PromoSvc as "promotion-service"
+participant CouponSvc as "coupon-service"
+participant Pipeline as "计价管道\n(可配置步骤)"
+participant Apollo as "Apollo配置中心"
+
+== 下单计价 ==
+User -> OrderCore: 提交订单
+OrderCore -> PriceSvc: POST /api/v1/price/calculate (items, user, coupons)
+
+PriceSvc -> Pipeline: 开始计价
+Pipeline -> Apollo: 获取配置 pricing.pipeline.steps
+Apollo --> Pipeline: ["BASIC","MEMBER","PROMOTION","COUPON","SHIPPING","TAX"]
+
+== Step 1: BasicPricer ==
+Pipeline -> Pipeline: BasicPricer → unitPrice = SKU原价
+Pipeline --> Pipeline: lineTotal = unitPrice * quantity
+
+== Step 2: MemberPricer ==
+Pipeline -> MemberSvc: GET /members/{userId}/price-rate
+MemberSvc --> Pipeline: {tier: "DIAMOND", discountRate: 0.9}
+Pipeline -> Pipeline: MemberPricer → memberPrice = unitPrice * 0.9
+Pipeline --> Pipeline: memberDiscount = unitPrice - memberPrice
+
+== Step 3: PromoPricer ==
+Pipeline -> PromoSvc: 查询可用促销 (items, total)
+PromoSvc --> Pipeline: [{type:"FULL_REDUCTION", reduce:50}]
+Pipeline -> Pipeline: 验证叠加互斥 (memberPrice x FULL_REDUCTION → ✅ 可叠加)
+Pipeline -> Pipeline: PromoPricer → promoDiscount = -50
+Pipeline --> Pipeline: afterPromo = memberPrice - promoDiscount
+
+== Step 4: CouponPricer ==
+Pipeline -> CouponSvc: 查询可用优惠券 (user, items)
+CouponSvc --> Pipeline: [{type:"CASH", value:30}]
+Pipeline -> Pipeline: 验证券叠加互斥 (FULL_REDUCTION x CASH → ✅ 可叠加)
+Pipeline -> CouponSvc: POST /lock (幂等, 预占券)
+CouponSvc --> Pipeline: {locked: true}
+Pipeline -> Pipeline: CouponPricer → couponDiscount = -30
+Pipeline --> Pipeline: afterCoupon = afterPromo - couponDiscount
+
+== Step 5: ShippingPricer ==
+Pipeline -> MemberSvc: GET /members/{userId}/shipping-policy
+MemberSvc --> Pipeline: {level: "DIAMOND", freeShipping: true}
+Pipeline -> Pipeline: ShippingPricer → shippingFee = 0 (VIP免运费)
+
+== Step 6: TaxPricer ==
+Pipeline -> Pipeline: TaxPricer → tax = afterCoupon * taxRate
+
+== 汇总结果 ==
+Pipeline --> Pipeline: 计算汇总
+Pipeline --> PriceSvc: PricingResult
+PriceSvc --> OrderCore: {finalTotal, 各步骤明细}
+
+OrderCore --> User: 订单确认 (最终金额: ¥XXX.XX)
+
+@enduml

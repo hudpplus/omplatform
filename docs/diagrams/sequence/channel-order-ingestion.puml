@@ -1,0 +1,88 @@
+@startuml
+title 全渠道订单接入流程（以天猫 Webhook 为例）
+
+actor "天猫" as tmall
+participant "Channel Gateway" as cgw
+participant "channel-adapter" as adapter
+database "Redis" as redis
+database "channel_raw_order" as rawdb
+database "order" as ob
+participant "order-core" as order
+participant "workflow-service" as wf
+queue "RocketMQ" as mq
+
+== 订单推送 + 认证 ==
+
+tmall -> cgw: POST /channel/tmall/webhook/order\n(签名 + 订单数据)
+activate cgw
+
+cgw -> cgw: 渠道认证 Filter
+note right
+  根据 X-Shop-Id 获取渠道店铺
+  的 AppKey + Secret，验签
+  支持 HMAC-SHA256 / OAuth2
+end note
+
+cgw -> redis: 渠道限流检查\n(Redis Lua 原子计数)
+redis --> cgw: 允许
+
+cgw -> adapter: 转发标准化后的原始请求
+deactivate cgw
+
+== 标准化处理 ==
+
+activate adapter
+
+adapter -> adapter: 1. 字段映射\n  天猫字段 → 中台标准字段
+adapter -> redis: 2. 幂等检查\n  (channel_type + channel_order_no)
+
+alt 已处理的订单
+    redis --> adapter: 已存在
+    adapter --> tmall: HTTP 200 (已处理，忽略)
+    deactivate adapter
+else 新订单
+
+    adapter -> product_center: 3. 补全商品信息\n  (skuId → productId + category)
+    product_center --> adapter: 商品信息
+
+    adapter -> adapter: 4. 规则校验\n  必填字段 / 金额一致性
+
+    adapter -> rawdb: 5. 保存原始订单\n  (channel_raw_order)
+    rawdb --> adapter: 成功
+
+    adapter -> order: 6. 创建标准化订单\n  (channel_type 已赋值)
+    activate order
+
+    note right of order
+      此时的订单已包含
+      channel_type= tmall
+      channel_order_no= 渠道订单号
+      channel_shop_id= 店铺标识
+    end note
+
+    order -> order: 状态机 INIT → PENDING_PAY
+    order --> adapter: 创建成功 (order_no)
+    deactivate order
+
+    adapter -> mq: 发布 ChannelOrderReceivedEvent
+    deactivate adapter
+
+    == 走已有 Saga 流程 ==
+    mq -> wf: 触发下单流程 (非必须, 异步)
+    activate wf
+    wf -> order: 启动 Saga 编排
+
+    == 异步回写渠道 ==
+    order -> mq: 订单状态变更事件 (交付/发货等)
+    mq -> adapter: ChannelStatusSyncConsumer
+    activate adapter
+    adapter -> tmall: 回写订单状态 (syncStatus)
+    tmall --> adapter: 成功
+    adapter -> adapter: 记录同步日志
+    deactivate adapter
+
+    tmall --> cgw: HTTP 200 (处理成功)
+    cgw --> tmall: HTTP 202 (已接受)
+end
+
+@enduml
