@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -78,7 +80,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -114,7 +118,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -150,7 +156,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -186,7 +194,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -222,7 +232,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -258,7 +270,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -294,7 +308,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -738,7 +754,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -774,7 +792,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -810,7 +830,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -846,7 +868,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -882,7 +906,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -918,7 +944,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -954,7 +982,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -990,7 +1020,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -1434,7 +1466,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -1470,7 +1504,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -1506,7 +1542,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -1542,7 +1580,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -1578,7 +1618,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -1614,7 +1656,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -1650,7 +1694,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -1686,7 +1732,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2130,7 +2178,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2166,7 +2216,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2202,7 +2254,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2238,7 +2292,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2274,7 +2330,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2310,7 +2368,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2346,7 +2406,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2382,7 +2444,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2826,7 +2890,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2862,7 +2928,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2898,7 +2966,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2934,7 +3004,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -2970,7 +3042,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3006,7 +3080,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3042,7 +3118,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3078,7 +3156,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3522,7 +3602,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3558,7 +3640,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3594,7 +3678,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3630,7 +3716,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3666,7 +3754,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3702,7 +3792,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3738,7 +3830,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -3774,7 +3868,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4218,7 +4314,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4254,7 +4352,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4290,7 +4390,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4326,7 +4428,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4362,7 +4466,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4398,7 +4504,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4434,7 +4542,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4470,7 +4580,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4914,7 +5026,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4950,7 +5064,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -4986,7 +5102,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5022,7 +5140,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5058,7 +5178,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5094,7 +5216,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5130,7 +5254,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5166,7 +5292,9 @@ CREATE TABLE IF NOT EXISTS `order_ecommerce_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5610,7 +5738,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5646,7 +5776,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5682,7 +5814,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5718,7 +5852,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5754,7 +5890,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5790,7 +5928,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5826,7 +5966,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -5862,7 +6004,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6074,7 +6218,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6110,7 +6256,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6146,7 +6294,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6182,7 +6332,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6218,7 +6370,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_4` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6254,7 +6408,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_5` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6290,7 +6446,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_6` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6326,7 +6484,9 @@ CREATE TABLE IF NOT EXISTS `order_locallife_7` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6539,7 +6699,9 @@ CREATE TABLE IF NOT EXISTS `order_b2b_0` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6576,7 +6738,9 @@ CREATE TABLE IF NOT EXISTS `order_b2b_1` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6613,7 +6777,9 @@ CREATE TABLE IF NOT EXISTS `order_b2b_2` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
@@ -6650,7 +6816,9 @@ CREATE TABLE IF NOT EXISTS `order_b2b_3` (
   PRIMARY KEY (`order_no`),
   KEY `idx_buyer` (`buyer_id`,`status`),
   KEY `idx_shop` (`shop_id`,`status`),
-  KEY `idx_create` (`gmt_create`)
+  KEY `idx_create` (`gmt_create`),
+  KEY `idx_status_changed` (`status`,`status_changed_at`),
+  KEY `idx_modified_create` (`gmt_modified`,`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --

@@ -129,8 +129,9 @@ CREATE TABLE IF NOT EXISTS `order` (
     PRIMARY KEY (`order_no`),
     KEY `idx_buyer` (`buyer_id`, `status`),
     KEY `idx_shop` (`shop_id`, `status`),
-    KEY `idx_status_expire` (`status`, `status_expires_at`),
-    KEY `idx_create` (`gmt_create`)
+    KEY `idx_status_changed` (`status`, `status_changed_at`),
+    KEY `idx_create` (`gmt_create`),
+    KEY `idx_modified_create` (`gmt_modified`, `gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单主表';
 
 -- 订单商品行（ADR-039 行级拆分）
@@ -497,9 +498,8 @@ CREATE TABLE IF NOT EXISTS settlement_order (
     `deleted`      TINYINT       NOT NULL DEFAULT 0,
     PRIMARY KEY (`settle_no`),
     KEY `idx_order` (`order_no`),
-    KEY `idx_shop` (`shop_id`),
-    KEY `idx_status` (`status`),
-    KEY `idx_create` (`gmt_create`)
+    KEY `idx_shop_status` (`shop_id`, `gmt_create`),
+    KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='结算单';
 
 -- 对账记录
@@ -1045,155 +1045,38 @@ CREATE TABLE IF NOT EXISTS wms_packing (
     KEY `idx_task` (`task_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='打包记录';
 
+
 -- ============================================================================
--- ADR-017: 多业务线数据物理隔离 — 新表结构
+-- TCC 事务表（oms_trade 库）
 -- ============================================================================
+-- TCC persistence tables
+CREATE TABLE IF NOT EXISTS tcc_transaction (
+  tx_id varchar(64) PRIMARY KEY,
+  order_no varchar(64),
+  status varchar(32),
+  gmt_create datetime,
+  version bigint DEFAULT 0,
+  gmt_modified datetime,
+  deleted int DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 1. 现有 order 表增加 business_type 字段（存量兼容）
-ALTER TABLE `order` ADD COLUMN IF NOT EXISTS `business_type` VARCHAR(16) NOT NULL DEFAULT 'ecommerce' COMMENT '业务线 ecommerce/locallife/b2b' AFTER `shop_id`;
-ALTER TABLE order_items ADD COLUMN IF NOT EXISTS `business_type` VARCHAR(16) NOT NULL DEFAULT 'ecommerce' COMMENT '业务线(冗余路由用)' AFTER `order_no`;
+CREATE TABLE IF NOT EXISTS tcc_participant_state (
+  id bigint PRIMARY KEY AUTO_INCREMENT,
+  tx_id varchar(64) NOT NULL,
+  participant_id varchar(128) NOT NULL,
+  status varchar(32) NOT NULL,
+  try_data text,
+  last_attempt datetime,
+  version bigint DEFAULT 0,
+  gmt_create datetime,
+  gmt_modified datetime,
+  deleted int DEFAULT 0,
+  INDEX idx_tx_id (tx_id),
+  INDEX idx_status (status),
+  UNIQUE KEY ux_tx_participant (tx_id, participant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 2. 电商订单表（物理分表模板，ShardingSphere 路由到 order_ecommerce_0~63）
---   每个 oms_trade_ecommerce_{0..7} 数据库中需创建 order_ecommerce_{0..7}
---   order_items_{0..7} order_ecommerce_ext_{0..7}
---   以下为各库各表的完整 DDL 模板
---
---   实际建库建表脚由 deploy/shard/create-shard-tables.sh 或 ShardingSphere 自动建表
---   此处列出的 DDL 用于参考和手工初始化
---
--- 电商订单基础表模板
--- DDL for: oms_trade_ecommerce_{0..7}.order_ecommerce_{0..7}
--- CREATE TABLE `order_ecommerce_X` (
---     `order_no`        VARCHAR(64)   NOT NULL COMMENT '订单号',
---     `parent_order_no` VARCHAR(64)   DEFAULT NULL COMMENT '父订单号',
---     `buyer_id`        VARCHAR(64)   NOT NULL COMMENT '买家 ID',
---     `shop_id`         VARCHAR(64)   NOT NULL COMMENT '店铺 ID',
---     `business_type`   VARCHAR(16)   NOT NULL DEFAULT 'ecommerce' COMMENT '业务线',
---     `status`          VARCHAR(32)   NOT NULL COMMENT '订单状态',
---     `previous_status` VARCHAR(32)   DEFAULT NULL COMMENT '上一状态',
---     `total_amount`    DECIMAL(12,2) NOT NULL DEFAULT 0.00,
---     `pay_amount`      DECIMAL(12,2) NOT NULL DEFAULT 0.00,
---     `freight_amount`  DECIMAL(12,2) NOT NULL DEFAULT 0.00,
---     `discount_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
---     `address_id`      VARCHAR(64)   DEFAULT NULL,
---     `remark`          VARCHAR(512)  DEFAULT NULL,
---     `channel_source`  VARCHAR(32)   DEFAULT NULL,
---     `coupon_instance_id` VARCHAR(64) DEFAULT NULL,
---     `pay_channel`     VARCHAR(32)   DEFAULT NULL,
---     `transaction_id`  VARCHAR(128)  DEFAULT NULL,
---     `hold_reason`     VARCHAR(256)  DEFAULT NULL,
---     `frozen_reason`   VARCHAR(256)  DEFAULT NULL,
---     `status_changed_at` DATETIME    DEFAULT NULL,
---     `status_expires_at` DATETIME    DEFAULT NULL,
---     `version`         BIGINT        NOT NULL DEFAULT 0,
---     `gmt_create`      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
---     `gmt_modified`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
---     `deleted`         TINYINT       NOT NULL DEFAULT 0,
---     PRIMARY KEY (`order_no`),
---     KEY `idx_buyer` (`buyer_id`, `status`),
---     KEY `idx_shop` (`shop_id`, `status`),
---     KEY `idx_status_expire` (`status`, `status_expires_at`),
---     KEY `idx_create` (`gmt_create`)
--- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='电商订单分表';
 
--- 电商订单扩展表模板
--- CREATE TABLE `order_ecommerce_ext_X` (
---     `order_no`            VARCHAR(64)   NOT NULL COMMENT '订单号',
---     `seckill_activity_id` BIGINT        DEFAULT NULL COMMENT '秒杀活动 ID',
---     `seckill_pipeline`    VARCHAR(16)   DEFAULT NULL COMMENT '秒杀批次',
---     `pre_sale_id`         BIGINT        DEFAULT NULL COMMENT '预售活动 ID',
---     `pre_sale_stage`      VARCHAR(16)   DEFAULT NULL COMMENT '预售阶段(定金/尾款)',
---     `pre_sale_deposit`    DECIMAL(12,2) DEFAULT NULL COMMENT '定金金额',
---     `coupon_id`           BIGINT        DEFAULT NULL COMMENT '优惠券 ID',
---     `coupon_split_amount` DECIMAL(12,2) DEFAULT NULL COMMENT '优惠券分摊金额',
---     `promotion_id`        VARCHAR(64)   DEFAULT NULL COMMENT '营销活动 ID',
---     `delivery_type`       VARCHAR(16)   DEFAULT NULL COMMENT '配送方式',
---     `expected_delivery_time` DATETIME   DEFAULT NULL COMMENT '预计送达时间',
---     `sign_time`           DATETIME      DEFAULT NULL COMMENT '签收时间',
---     PRIMARY KEY (`order_no`),
---     KEY `idx_seckill` (`seckill_activity_id`, `seckill_pipeline`),
---     KEY `idx_pre_sale` (`pre_sale_id`, `pre_sale_stage`)
--- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='电商订单扩展分表';
-
--- 订单商品行分表模板
--- CREATE TABLE `order_items_X` (
---     `item_id`         BIGINT        AUTO_INCREMENT COMMENT '行 ID',
---     `order_no`        VARCHAR(64)   NOT NULL COMMENT '订单号',
---     `business_type`   VARCHAR(16)   NOT NULL DEFAULT 'ecommerce' COMMENT '业务线',
---     `sku_id`          VARCHAR(64)   NOT NULL COMMENT 'SKU ID',
---     `sku_name`        VARCHAR(256)  NOT NULL COMMENT 'SKU 名称（快照）',
---     `sku_spec`        VARCHAR(256)  DEFAULT NULL COMMENT 'SKU 规格',
---     `image_url`       VARCHAR(512)  DEFAULT NULL COMMENT '商品图片',
---     `quantity`        INT           NOT NULL DEFAULT 1,
---     `unit_price`      DECIMAL(12,2) NOT NULL,
---     `total_amount`    DECIMAL(12,2) NOT NULL,
---     `discount_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
---     `pay_amount`      DECIMAL(12,2) NOT NULL DEFAULT 0.00,
---     `category_id`     VARCHAR(64)   DEFAULT NULL,
---     `line_type`       VARCHAR(32)   NOT NULL DEFAULT 'NORMAL' COMMENT 'NORMAL/GIFT/EXCHANGE',
---     `status`          VARCHAR(32)   NOT NULL DEFAULT 'PENDING',
---     `promotion_info`  JSON          DEFAULT NULL,
---     `version`         BIGINT        NOT NULL DEFAULT 0,
---     `gmt_create`      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
---     `gmt_modified`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
---     `deleted`         TINYINT       NOT NULL DEFAULT 0,
---     PRIMARY KEY (`item_id`),
---     KEY `idx_order` (`order_no`),
---     KEY `idx_sku` (`sku_id`)
--- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单商品行分表';
-
--- 3. 本地生活订单表（预留）
--- DDL for: oms_trade_locallife_{0..1}.order_locallife_{0..7}
--- 结构同 order_ecommerce（减去电商特有字段，增加本地生活字段）
-
--- 3. 本地生活数据库
-CREATE DATABASE IF NOT EXISTS oms_trade_locallife_0 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE DATABASE IF NOT EXISTS oms_trade_locallife_1 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 本地生活订单基础表
--- CREATE TABLE `oms_trade_locallife_0`.`order_locallife_0` ( ... ) 等共 2 库 × 8 表
-
--- 本地生活扩展表
--- CREATE TABLE `order_locallife_ext_X` (
---     `order_no`             VARCHAR(64)   NOT NULL COMMENT '订单号',
---     `verification_code`    VARCHAR(32)   DEFAULT NULL COMMENT '核销码',
---     `verification_status`  VARCHAR(16)   DEFAULT NULL COMMENT '核销状态 UNUSED/USED/EXPIRED',
---     `verification_time`    DATETIME      DEFAULT NULL COMMENT '核销时间',
---     `verifier_id`          VARCHAR(64)   DEFAULT NULL COMMENT '核销人 ID',
---     `store_id`             VARCHAR(64)   DEFAULT NULL COMMENT '门店 ID',
---     `store_name`           VARCHAR(128)  DEFAULT NULL COMMENT '门店名称',
---     `service_time`         DATETIME      DEFAULT NULL COMMENT '预约服务时间',
---     `service_duration`     INT           DEFAULT NULL COMMENT '服务时长(分钟)',
---     `service_address`      VARCHAR(256)  DEFAULT NULL COMMENT '服务地址',
---     `technician_id`        VARCHAR(64)   DEFAULT NULL COMMENT '技师 ID',
---     PRIMARY KEY (`order_no`),
---     KEY `idx_store` (`store_id`),
---     KEY `idx_verification` (`verification_code`)
--- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='本地生活订单扩展分表';
-
--- 4. B2B 数据库
-CREATE DATABASE IF NOT EXISTS oms_trade_b2b_0 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- B2B 订单基础表
--- CREATE TABLE `oms_trade_b2b_0`.`order_b2b_0` ( ... ) 等共 1 库 × 4 表
-
--- B2B 扩展表
--- CREATE TABLE `order_b2b_ext_X` (
---     `order_no`              VARCHAR(64)   NOT NULL COMMENT '订单号',
---     `approval_flow_id`      VARCHAR(64)   DEFAULT NULL COMMENT '审批流 ID',
---     `approval_status`       VARCHAR(16)   DEFAULT NULL COMMENT '审批状态 PENDING/APPROVED/REJECTED',
---     `approval_node`         VARCHAR(64)   DEFAULT NULL COMMENT '当前审批节点',
---     `contract_no`           VARCHAR(64)   DEFAULT NULL COMMENT '合同编号',
---     `installment_plan_id`   VARCHAR(64)   DEFAULT NULL COMMENT '分期方案 ID',
---     `installment_count`     INT           DEFAULT NULL COMMENT '分期期数',
---     `company_id`            VARCHAR(64)   DEFAULT NULL COMMENT '企业 ID',
---     `invoice_type`          VARCHAR(16)   DEFAULT NULL COMMENT '发票类型 FULL/SPECIAL/ELECTRONIC',
---     `invoice_title`         VARCHAR(128)  DEFAULT NULL COMMENT '发票抬头',
---     `tax_id`                VARCHAR(64)   DEFAULT NULL COMMENT '税号',
---     `purchase_order_no`     VARCHAR(64)   DEFAULT NULL COMMENT '采购单号',
---     PRIMARY KEY (`order_no`),
---     KEY `idx_company` (`company_id`),
---     KEY `idx_approval` (`approval_flow_id`, `approval_status`),
---     KEY `idx_contract` (`contract_no`)
--- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='B2B 订单扩展分表';
-
+-- ============================================================================
+-- ADR-017 分库分表（11 库 232 表）：单独执行 deploy/sql/adr-017-shard-ddl.sql
+-- ============================================================================
