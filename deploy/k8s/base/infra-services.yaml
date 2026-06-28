@@ -1,0 +1,142 @@
+# =============================================================================
+# OM Platform — 基础设施桥接 Service
+# 将 docker-compose 中的基础设施暴露为 K8s Service，Java 服务通过其访问。
+# 适用于 Docker Desktop K8s（host.docker.internal）。
+# =============================================================================
+
+# ---- Nacos（注册中心 + 配置中心） ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: nacos
+  namespace: omplatform
+  labels:
+    app.kubernetes.io/component: infra
+    app.kubernetes.io/name: nacos
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 8848
+      targetPort: 8848
+      name: api
+    - port: 9848
+      targetPort: 9848
+      name: grpc
+
+---
+# ---- MySQL（通过 ProxySQL 6033 端口） ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  namespace: omplatform
+  labels:
+    app.kubernetes.io/component: infra
+    app.kubernetes.io/name: mysql
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 3306
+      targetPort: 3306
+      name: mysql
+    - port: 6033
+      targetPort: 6033
+      name: proxysql
+
+---
+# ---- RocketMQ NameServer ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: rocketmq-namesrv
+  namespace: omplatform
+  labels:
+    app.kubernetes.io/component: infra
+    app.kubernetes.io/name: rocketmq
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 9876
+      targetPort: 9876
+      name: namesrv
+
+---
+# ---- Elasticsearch（oms-trade CQRS 读端）
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  namespace: omplatform
+  labels:
+    app.kubernetes.io/component: infra
+    app.kubernetes.io/name: elasticsearch
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 9200
+      targetPort: 9200
+      name: http
+
+---
+# ---- Sentinel Dashboard ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-dashboard
+  namespace: omplatform
+  labels:
+    app.kubernetes.io/component: infra
+    app.kubernetes.io/name: sentinel
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 8088
+      targetPort: 8088
+      name: dashboard
+
+---
+# ---- XXL-Job Admin ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: xxl-job-admin
+  namespace: omplatform
+  labels:
+    app.kubernetes.io/component: infra
+    app.kubernetes.io/name: xxl-job
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 8082
+      targetPort: 8082
+      name: admin
+
+---
+# ---- Redis Sentinel（Headless，3 个哨兵端口） ----
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: omplatform
+  labels:
+    app.kubernetes.io/component: infra
+    app.kubernetes.io/name: redis
+spec:
+  type: ExternalName
+  externalName: host.docker.internal
+  ports:
+    - port: 26379
+      targetPort: 26379
+      name: sentinel-1
+    - port: 26380
+      targetPort: 26380
+      name: sentinel-2
+    - port: 26381
+      targetPort: 26381
+      name: sentinel-3

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: igw
+  namespace: omplatform
+  labels:
+    app: igw
+spec:
+  selector:
+    app: igw
+  ports:
+    - port: 8087
+      targetPort: 8087
+      name: http
+  type: ClusterIP

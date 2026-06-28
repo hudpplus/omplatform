@@ -1,0 +1,20 @@
+# =============================================================================
+# OM Platform — 本地开发 Overlay（Docker Desktop K8s）
+# 基础设施由 docker-compose 提供，ExternalName Service 桥接。
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: omplatform
+
+resources:
+  - ../../base
+
+# 本地开发可缩减资源、关闭不必要的生产特性
+patches:
+  # 确保所有 Deployment 的 replicas=1
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1

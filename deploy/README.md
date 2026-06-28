@@ -124,3 +124,151 @@ curl -X POST http://localhost:8087/buyer/orders \
 
 启动后访问 http://localhost:8848/nacos → "服务管理" → "服务列表"，
 应能看到已注册的微服务实例。
+
+---
+
+## MySQL MGR 高可用集群（ADR-050）
+
+### 架构
+
+```
+应用 / ShardingSphere → ProxySQL (6033) → MySQL MGR 3 节点
+                                           ├── mgr1 (Primary, 3307)
+                                           ├── mgr2 (Secondary, 3308)
+                                           └── mgr3 (Secondary, 3309)
+```
+
+- **ProxySQL** 透明代理：读写分离（SELECT 走从库）+ 自动故障转移
+- **应用零改动**：只需把 JDBC URL 端口从 `3306` 改为 `6033`
+- **仅用于 MGR 模式**：单实例模式（`docker-compose.yml`）不受影响
+
+### 启动集群
+
+```bash
+# 1. 启动 3 节点 MGR + ProxySQL
+docker-compose -f docker-compose-mgr.yml up -d
+
+# 2. 引导组复制（首次启动后执行一次）
+docker exec mgr1 bash /etc/mysql/init-mgr.sh
+
+# 3. 验证集群状态
+docker exec mgr1 mysql -uroot -proot -e \
+  "SELECT member_host, member_port, member_state \
+   FROM performance_schema.replication_group_members;"
+
+# 4. 验证 ProxySQL 连接
+mysql -h127.0.0.1 -P6033 -uroot -proot -e "SHOW DATABASES;"
+```
+
+### 验证读写分离
+
+```bash
+# 连 ProxySQL 管理接口查看流量分布
+mysql -h127.0.0.1 -P6032 -uradmin -pradmin -e \
+  "SELECT hostgroup, srv_host, srv_port, status, ConnUsed, QueriesActive \
+   FROM stats.stats_mysql_connection_pool;"
+```
+
+### 验证故障切换
+
+```bash
+# 1. 停止主库
+docker stop mgr1
+
+# 2. 等待 30s（MGR 检测 + 选主 + ProxySQL 感知）
+sleep 30
+
+# 3. 验证业务不受影响（应用通过 ProxySQL 连到新主）
+mysql -h127.0.0.1 -P6033 -uroot -proot -e "SELECT 1;"
+
+# 4. 查看新主是谁
+docker exec mgr2 mysql -uroot -proot -e \
+  "SELECT member_host, member_role \
+   FROM performance_schema.replication_group_members\G"
+
+# 5. 恢复旧主
+docker start mgr1
+# 旧主恢复后自动加入 MGR 作为 Secondary
+```
+
+### 切换回单实例模式
+
+```bash
+# 停 MGR 集群
+docker-compose -f docker-compose-mgr.yml down -v
+
+# 应用配置改回 localhost:3306
+#   application.yml:    localhost:6033 → localhost:3306
+#   nacos/oms-trade.yaml: localhost:6033 → localhost:3306
+
+# 重启应用
+```
+
+---
+
+## Redis Sentinel 高可用集群（ADR-050 Part C）
+
+### 架构
+
+```
+应用 (StringRedisTemplate) → Sentinel → Redis Master (6379)
+                                       ├── Replica 1 (6380, 只读)
+                                       └── Replica 2 (6381, 只读)
+```
+
+- **Sentinel** 3 节点仲裁，自动故障转移
+- **应用配置**从 `host:port` 改为 `sentinel.master/nodes`
+- **Lua 脚本完全兼容**——所有 key 在同一个 master 操作，无跨 slot 问题
+
+### 启动与验证
+
+```bash
+# Redis + Sentinel 已集成在 docker-compose-mgr.yml 中，启动时自动拉起
+docker-compose -f docker-compose-mgr.yml up -d
+
+# 验证 Redis Sentinel 集群
+docker exec redis-master bash /etc/redis/init-sentinel.sh
+
+# 查看集群状态
+docker exec sentinel1 redis-cli -p 26379 SENTINEL master mymaster
+docker exec sentinel1 redis-cli -p 26379 SENTINEL REPLICAS mymaster
+docker exec sentinel1 redis-cli -p 26379 SENTINEL SENTINELS mymaster
+```
+
+### 验证故障切换
+
+```bash
+# 1. 停止 master
+docker stop redis-master
+
+# 2. 等待 Sentinel 完成故障切换（~15s）
+sleep 15
+
+# 3. 查看新 master
+docker exec sentinel1 redis-cli -p 26379 SENTINEL get-master-addr-by-name mymaster
+
+# 4. 验证应用仍可写入（通过 Sentinel 自动发现新 master）
+#    应用无需重启，Lettuce 客户端自动感知 Sentinel 通知
+
+# 5. 恢复旧 master
+docker start redis-master
+# 旧 master 恢复后以 replica 身份重新加入集群
+```
+
+### 切换回单实例模式
+
+```bash
+# 停 MGR + Sentinel 集群
+docker-compose -f docker-compose-mgr.yml down -v
+
+# 所有 11 个服务的 application.yml 改回 host: localhost / port: 6379
+# 启动原有的单实例 docker-compose.yml
+docker-compose up -d
+```
+
+# 应用配置改回 localhost:3306
+#   application.yml:    localhost:6033 → localhost:3306
+#   nacos/oms-trade.yaml: localhost:6033 → localhost:3306
+
+# 重启应用
+```

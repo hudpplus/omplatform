@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+configMapGenerator:
+  - name: oms-marketing-config
+    behavior: create
+    literals:
+      - SERVER_PORT=8083
+      - SPRING_APPLICATION_NAME=oms-marketing
+      - SERVER_SHUTDOWN=graceful
+      - SPRING_LIFECYCLE_TIMEOUT-PER-SHUTDOWN-PHASE=30s
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW-DETAILS=always
+      - DUBBO_CONSUMER_RETRIES=2
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:6033/oms_marketing?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_DATASOURCE_DRIVER-CLASS-NAME=com.mysql.cj.jdbc.Driver

@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oms-risk-integration
+  namespace: omplatform
+  labels:
+    app: oms-risk-integration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oms-risk-integration
+  template:
+    metadata:
+      labels:
+        app: oms-risk-integration
+    spec:
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: oms-risk-integration
+          image: omplatform/oms-risk-integration:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+              name: http
+          envFrom:
+            - configMapRef:
+                name: oms-risk-integration-config
+            - configMapRef:
+                name: infra-endpoints
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"

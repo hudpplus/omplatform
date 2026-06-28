@@ -1,6 +1,21 @@
 server:
   port: 8084
 
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+# p6spy SQL 日志代理
+decorator:
+  datasource:
+    p6spy:
+      enable-logging: true
+      logging: slf4j
+      slow-sql-threshold: 200
+      multiline: true
+
 spring:
   application:
     name: oms-risk-integration
@@ -18,9 +33,13 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
       timeout: 3000ms
+      sentinel:
+        master: mymaster
+        nodes:
+          - 127.0.0.1:26379
+          - 127.0.0.1:26380
+          - 127.0.0.1:26381
 
 dubbo:
   application:

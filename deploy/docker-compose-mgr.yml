@@ -1,0 +1,258 @@
+# =============================================================================
+# OM Platform — 全栈高可用环境（MySQL MGR + ProxySQL + Redis Sentinel）
+# 启动: docker-compose -f docker-compose-mgr.yml up -d
+# 停止: docker-compose -f docker-compose-mgr.yml down -v（清除数据）
+# 引导 MGR:  docker exec mgr1 bash /etc/mysql/init-mgr.sh
+# 验证 Redis: docker exec redis-master bash /etc/redis/init-sentinel.sh
+#
+# 端口:
+#   - ProxySQL SQL:      6033 (应用连接)
+#   - ProxySQL Admin:    6032 (DBA 管理)
+#   - MySQL mgr1:        3307 (直连，不推荐)
+#   - MySQL mgr2:        3308
+#   - MySQL mgr3:        3309
+#   - Redis Master:      6379
+#   - Redis Replica 1:   6380
+#   - Redis Replica 2:   6381
+#   - Sentinel 1:        26379
+#   - Sentinel 2:        26380
+#   - Sentinel 3:        26381
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ──── MySQL MGR 节点 1（初始 Primary） ─────────────────────────────────
+  mysql-mgr1:
+    image: mysql:8.0
+    container_name: mgr1
+    hostname: mgr1
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./conf/mysql/mgr1.cnf:/etc/my.cnf
+      - ./conf/mysql/init-mgr.sh:/etc/mysql/init-mgr.sh
+      - ./docker-data/mysql-mgr1:/var/lib/mysql
+      - ./sql/init-all-databases.sql:/docker-entrypoint-initdb.d/01-init.sql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_HOST: "%"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      mgr-net:
+        aliases:
+          - mgr1
+
+  # ──── MySQL MGR 节点 2（初始 Secondary） ──────────────────────────────
+  mysql-mgr2:
+    image: mysql:8.0
+    container_name: mgr2
+    hostname: mgr2
+    restart: unless-stopped
+    ports:
+      - "3308:3306"
+    volumes:
+      - ./conf/mysql/mgr2.cnf:/etc/my.cnf
+      - ./docker-data/mysql-mgr2:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_HOST: "%"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      mysql-mgr1:
+        condition: service_healthy
+    networks:
+      mgr-net:
+        aliases:
+          - mgr2
+
+  # ──── MySQL MGR 节点 3（初始 Secondary） ──────────────────────────────
+  mysql-mgr3:
+    image: mysql:8.0
+    container_name: mgr3
+    hostname: mgr3
+    restart: unless-stopped
+    ports:
+      - "3309:3306"
+    volumes:
+      - ./conf/mysql/mgr3.cnf:/etc/my.cnf
+      - ./docker-data/mysql-mgr3:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_HOST: "%"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      mysql-mgr1:
+        condition: service_healthy
+    networks:
+      mgr-net:
+        aliases:
+          - mgr3
+
+  # ──── ProxySQL（读写分离 + 故障转移） ─────────────────────────────────
+  proxysql:
+    image: proxysql/proxysql:2.5.5
+    container_name: proxysql
+    hostname: proxysql
+    restart: unless-stopped
+    ports:
+      - "6033:6033"   # SQL 接口（应用连接）
+      - "6032:6032"   # 管理接口（DBA 维护）
+    volumes:
+      - ./conf/proxysql/init-admin.sql:/etc/proxysql/init.sql
+    depends_on:
+      mysql-mgr1:
+        condition: service_healthy
+      mysql-mgr2:
+        condition: service_healthy
+      mysql-mgr3:
+        condition: service_healthy
+    networks:
+      - mgr-net
+
+  # ──── Redis Master ─────────────────────────────────────────────────────
+  redis-master:
+    image: redis:7.2
+    container_name: redis-master
+    hostname: redis-master
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./conf/redis/redis-master.conf:/etc/redis/redis.conf
+      - ./conf/redis/init-sentinel.sh:/etc/redis/init-sentinel.sh
+      - ./docker-data/redis-master:/data
+    command: redis-server /etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "omplatform", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      mgr-net:
+        aliases:
+          - redis-master
+
+  # ──── Redis Replica 1 ──────────────────────────────────────────────────
+  redis-replica-1:
+    image: redis:7.2
+    container_name: redis-replica-1
+    hostname: redis-replica-1
+    restart: unless-stopped
+    ports:
+      - "6380:6380"
+    volumes:
+      - ./conf/redis/redis-replica1.conf:/etc/redis/redis.conf
+      - ./docker-data/redis-replica-1:/data
+    command: redis-server /etc/redis/redis.conf
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "omplatform", "-p", "6380", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      mgr-net:
+        aliases:
+          - redis-replica1
+
+  # ──── Redis Replica 2 ──────────────────────────────────────────────────
+  redis-replica-2:
+    image: redis:7.2
+    container_name: redis-replica-2
+    hostname: redis-replica-2
+    restart: unless-stopped
+    ports:
+      - "6381:6381"
+    volumes:
+      - ./conf/redis/redis-replica2.conf:/etc/redis/redis.conf
+      - ./docker-data/redis-replica-2:/data
+    command: redis-server /etc/redis/redis.conf
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "omplatform", "-p", "6381", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      mgr-net:
+        aliases:
+          - redis-replica2
+
+  # ──── Redis Sentinel 1 ─────────────────────────────────────────────────
+  sentinel-1:
+    image: redis:7.2
+    container_name: sentinel-1
+    hostname: sentinel-1
+    restart: unless-stopped
+    ports:
+      - "26379:26379"
+    volumes:
+      - ./conf/redis/sentinel1.conf:/etc/redis/sentinel.conf
+    command: redis-sentinel /etc/redis/sentinel.conf
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      mgr-net:
+        aliases:
+          - sentinel1
+
+  # ──── Redis Sentinel 2 ─────────────────────────────────────────────────
+  sentinel-2:
+    image: redis:7.2
+    container_name: sentinel-2
+    hostname: sentinel-2
+    restart: unless-stopped
+    ports:
+      - "26380:26380"
+    volumes:
+      - ./conf/redis/sentinel2.conf:/etc/redis/sentinel.conf
+    command: redis-sentinel /etc/redis/sentinel.conf
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      mgr-net:
+        aliases:
+          - sentinel2
+
+  # ──── Redis Sentinel 3 ─────────────────────────────────────────────────
+  sentinel-3:
+    image: redis:7.2
+    container_name: sentinel-3
+    hostname: sentinel-3
+    restart: unless-stopped
+    ports:
+      - "26381:26381"
+    volumes:
+      - ./conf/redis/sentinel3.conf:/etc/redis/sentinel.conf
+    command: redis-sentinel /etc/redis/sentinel.conf
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    networks:
+      mgr-net:
+        aliases:
+          - sentinel3
+
+networks:
+  mgr-net:
+    name: om-mgr-network

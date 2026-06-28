@@ -19,19 +19,22 @@ import java.sql.Statement;
 import java.util.*;
 
 /**
- * ADR-017 分库分表手动冒烟测试。
+ * ADR-017 分库分表手动冒烟测试 + ADR-050 MySQL MGR 集群验证。
  * <p>
- * 直连 MySQL + ShardingSphere API（不启动 Spring Boot），验证：
+ * 通过 ProxySQL (6033) 连接 MySQL MGR 集群，验证：
  * <ol>
  *   <li>BusinessContext 驱动的路由是否正确</li>
  *   <li>电商/本地生活/B2B 三条业务线插入路由</li>
  *   <li>数据是否落在正确的物理分库分表</li>
+ *   <li>MGR 集群状态（3 节点 ONLINE + 读写分离）</li>
  * </ol>
+ * <p>
+ * 配置: MGR 模式用 localhost:6033 (ProxySQL)，单实例模式改回 localhost:3306。
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class ShardingSmokeTest {
 
-    private static final String MYSQL_HOST = "localhost:3306";
+    private static final String MYSQL_HOST = "localhost:6033"; // ADR-050: ProxySQL 端口; 单实例模式改回 3306
     private static final String MYSQL_USER = "root";
     private static final String MYSQL_PWD = "1234";
 
@@ -181,6 +184,40 @@ public class ShardingSmokeTest {
         System.out.printf("\n  总计: %d 条订单落在物理分片中 (期望 ≥7)%n", totalOrders);
         Assertions.assertTrue(totalOrders >= 7, "应有 7 条以上数据被正确路由到分片");
         System.out.println("  ✅ 数据落库验证通过");
+    }
+
+    @Test
+    @Order(5)
+    @DisplayName("MGR 集群状态验证 - ADR-050")
+    public void testMgrClusterStatus() throws Exception {
+        System.out.println("\n--- [MGR 集群验证] ---");
+
+        // 通过 rawDs（已连 ProxySQL）查询 MGR 成员状态
+        try (Connection conn = rawDs.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT member_host, member_state, member_role "
+                     + "FROM performance_schema.replication_group_members")) {
+
+            int count = 0;
+            int onlineCount = 0;
+            int primaryCount = 0;
+            while (rs.next()) {
+                count++;
+                String host = rs.getString("member_host");
+                String state = rs.getString("member_state");
+                String role = rs.getString("member_role");
+                System.out.printf("  %s | 状态: %s | 角色: %s%n", host, state, role);
+                if ("ONLINE".equalsIgnoreCase(state)) onlineCount++;
+                if ("PRIMARY".equalsIgnoreCase(role)) primaryCount++;
+            }
+
+            Assertions.assertEquals(3, count, "MGR 应有 3 个成员节点");
+            Assertions.assertEquals(3, onlineCount, "所有 MGR 节点应处于 ONLINE 状态");
+            Assertions.assertEquals(1, primaryCount, "单主模式应有且仅有 1 个 PRIMARY");
+        }
+
+        System.out.println("  ✅ MGR 集群验证通过");
     }
 
     // ====== 工具方法 ======

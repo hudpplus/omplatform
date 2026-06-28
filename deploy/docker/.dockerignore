@@ -1,0 +1,36 @@
+# OM Platform — Docker 构建忽略文件
+# 排除本地开发产物，加速构建
+
+# Maven
+target/
+*.jar
+*.war
+**/target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# 构建缓存
+.classpath
+.project
+.settings/
+.apt_generated/
+**/.apt_generated/
+
+# 测试（Docker 构建不需要）
+**/*Test.class
+**/*Tests.class
+
+# 本地数据
+deploy/docker-data/
+deploy/sql/
+
+# 文档
+docs/
+*.md
+README.md

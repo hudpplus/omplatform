@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+configMapGenerator:
+  - name: oms-trade-config
+    behavior: create
+    literals:
+      # 基础
+      - SERVER_PORT=8080
+      - SPRING_APPLICATION_NAME=oms-trade
+      - SERVER_SHUTDOWN=graceful
+      - SPRING_LIFECYCLE_TIMEOUT-PER-SHUTDOWN-PHASE=45s
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW-DETAILS=always
+      - DUBBO_CONSUMER_RETRIES=2
+
+      # 旧版迁移数据源
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:6033/oms_trade?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_DATASOURCE_DRIVER-CLASS-NAME=com.mysql.cj.jdbc.Driver
+      - LEGACY_DATASOURCE_URL=jdbc:mysql://mysql:6033/oms_trade?useSSL=false&serverTimezone=Asia/Shanghai
+
+      # ShardingSphere 11 个分片数据源
+      - SPRING_SHARDINGSPHERE_DATASOURCE_ECOMMERCE_DS_0_URL=jdbc:mysql://mysql:6033/oms_trade_ecommerce_0?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_ECOMMERCE_DS_1_URL=jdbc:mysql://mysql:6033/oms_trade_ecommerce_1?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_ECOMMERCE_DS_2_URL=jdbc:mysql://mysql:6033/oms_trade_ecommerce_2?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_ECOMMERCE_DS_3_URL=jdbc:mysql://mysql:6033/oms_trade_ecommerce_3?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_ECOMMERCE_DS_4_URL=jdbc:mysql://mysql:6033/oms_trade_ecommerce_4?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_ECOMMERCE_DS_5_URL=jdbc:mysql://mysql:6033/oms_trade_ecommerce_5?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_ECOMMERCE_DS_6_URL=jdbc:mysql://mysql:6033/oms_trade_ecommerce_6?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_ECOMMERCE_DS_7_URL=jdbc:mysql://mysql:6033/oms_trade_ecommerce_7?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_LOCALLIFE_DS_0_URL=jdbc:mysql://mysql:6033/oms_trade_locallife_0?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_LOCALLIFE_DS_1_URL=jdbc:mysql://mysql:6033/oms_trade_locallife_1?useSSL=false&serverTimezone=Asia/Shanghai
+      - SPRING_SHARDINGSPHERE_DATASOURCE_B2B_DS_0_URL=jdbc:mysql://mysql:6033/oms_trade_b2b_0?useSSL=false&serverTimezone=Asia/Shanghai
+
+      # XXL-Job 执行器
+      - XXL_JOB_EXECUTOR_APPNAME=oms-trade
+      - XXL_JOB_EXECUTOR_PORT=9999

@@ -9,7 +9,7 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/oms_trade?useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:6033/oms_trade?useSSL=false&serverTimezone=Asia/Shanghai
     username: root
     password: root
 
@@ -18,47 +18,47 @@ spring:
     datasource:
       names: ecommerce_ds_0,ecommerce_ds_1,ecommerce_ds_2,ecommerce_ds_3,ecommerce_ds_4,ecommerce_ds_5,ecommerce_ds_6,ecommerce_ds_7,locallife_ds_0,locallife_ds_1,b2b_ds_0
       ecommerce_ds_0:
-        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_0
+        url: jdbc:mysql://localhost:6033/oms_trade_ecommerce_0
         username: root
         password: root
       ecommerce_ds_1:
-        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_1
+        url: jdbc:mysql://localhost:6033/oms_trade_ecommerce_1
         username: root
         password: root
       ecommerce_ds_2:
-        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_2
+        url: jdbc:mysql://localhost:6033/oms_trade_ecommerce_2
         username: root
         password: root
       ecommerce_ds_3:
-        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_3
+        url: jdbc:mysql://localhost:6033/oms_trade_ecommerce_3
         username: root
         password: root
       ecommerce_ds_4:
-        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_4
+        url: jdbc:mysql://localhost:6033/oms_trade_ecommerce_4
         username: root
         password: root
       ecommerce_ds_5:
-        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_5
+        url: jdbc:mysql://localhost:6033/oms_trade_ecommerce_5
         username: root
         password: root
       ecommerce_ds_6:
-        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_6
+        url: jdbc:mysql://localhost:6033/oms_trade_ecommerce_6
         username: root
         password: root
       ecommerce_ds_7:
-        url: jdbc:mysql://localhost:3306/oms_trade_ecommerce_7
+        url: jdbc:mysql://localhost:6033/oms_trade_ecommerce_7
         username: root
         password: root
       locallife_ds_0:
-        url: jdbc:mysql://localhost:3306/oms_trade_locallife_0
+        url: jdbc:mysql://localhost:6033/oms_trade_locallife_0
         username: root
         password: root
       locallife_ds_1:
-        url: jdbc:mysql://localhost:3306/oms_trade_locallife_1
+        url: jdbc:mysql://localhost:6033/oms_trade_locallife_1
         username: root
         password: root
       b2b_ds_0:
-        url: jdbc:mysql://localhost:3306/oms_trade_b2b_0
+        url: jdbc:mysql://localhost:6033/oms_trade_b2b_0
         username: root
         password: root
     rules:
@@ -151,9 +151,13 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
       timeout: 3000ms
+      sentinel:
+        master: mymaster
+        nodes:
+          - 127.0.0.1:26379
+          - 127.0.0.1:26380
+          - 127.0.0.1:26381
 
   # Elasticsearch（CQRS 读端）
   elasticsearch:
@@ -240,7 +244,7 @@ logging:
 # 旧 `order` 表数据源（独立于 ShardingSphere，仅迁移/对账用）
 legacy:
   datasource:
-    url: jdbc:mysql://localhost:3306/oms_trade?useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:6033/oms_trade?useSSL=false&serverTimezone=Asia/Shanghai
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -251,3 +255,18 @@ omplatform:
     dual-write:
       enabled: false
     read-router: shardingsphere  # shardingsphere | legacy
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+# p6spy SQL 日志代理（仅 dev 环境生效）
+decorator:
+  datasource:
+    p6spy:
+      enable-logging: true
+      logging: slf4j
+      slow-sql-threshold: 200
+      multiline: true

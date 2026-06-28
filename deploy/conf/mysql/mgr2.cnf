@@ -1,0 +1,56 @@
+# OM Platform — MySQL MGR 节点 2 配置
+# 初始 Secondary 节点
+
+[mysqld]
+# === 基础 ===
+server-id                               = 2
+report_host                             = mgr2
+datadir                                 = /var/lib/mysql
+log-bin                                 = mysql-bin
+binlog_format                           = ROW
+log-slave-updates                       = ON
+expire_logs_days                        = 7
+binlog_expire_logs_seconds              = 604800
+
+# === GTID (MGR 必需) ===
+gtid_mode                               = ON
+enforce_gtid_consistency                = ON
+
+# === 复制 ===
+master_info_repository                  = TABLE
+relay_log_info_repository               = TABLE
+relay_log                               = relay-log
+relay_log_recovery                      = ON
+skip-slave-start                        = ON
+
+# === MGR ===
+plugin_load_add                         = 'group_replication.so'
+group_replication_group_name            = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+group_replication_start_on_boot         = OFF
+group_replication_bootstrap_group       = OFF
+group_replication_single_primary_mode   = ON
+group_replication_enforce_update_everywhere_checks = OFF
+group_replication_local_address         = "mgr2:33061"
+group_replication_group_seeds           = "mgr1:33061,mgr2:33061,mgr3:33061"
+group_replication_ip_whitelist          = "mgr1,mgr2,mgr3"
+group_replication_auto_rejoin_tries     = 3
+group_replication_exit_state_action     = ABORT_SERVER
+group_replication_member_expel_timeout  = 5
+group_replication_autorejoin_tries      = 3
+
+# === 字符集 ===
+character-set-server                    = utf8mb4
+collation-server                        = utf8mb4_unicode_ci
+
+# === 连接 ===
+max_connections                         = 500
+wait_timeout                            = 600
+interactive_timeout                     = 600
+
+# === InnoDB ===
+innodb_buffer_pool_size                 = 1G
+innodb_log_file_size                    = 512M
+innodb_flush_log_at_trx_commit          = 1
+innodb_flush_method                     = O_DIRECT
+innodb_io_capacity                      = 2000
+innodb_io_capacity_max                  = 3000
