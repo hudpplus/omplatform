@@ -125,7 +125,7 @@ public class OrderDubboService implements OrderService {
         orderRepository.updateById(entity);
 
         // 6. 发布订单已支付事件（驱动下游履约：扣库存、券核销、ES 同步）
-        eventPublisher.orderPaid(orderNo, entity.getBuyerId(), transactionId);
+        eventPublisher.orderPaid(orderNo, entity.getBuyerId(), transactionId, entity.getBusinessType());
 
         log.info("支付处理完成: orderNo={}, paid={}, channel={}, txId={}",
                 orderNo, paidAmount, payChannel, transactionId);

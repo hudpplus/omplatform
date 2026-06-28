@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.omplatform.trade.es.consumer.OrderEsSyncService;
 import com.omplatform.trade.repository.OrderRepository;
 import com.omplatform.trade.repository.entity.OrderEntity;
+import com.omplatform.trade.sharding.BusinessContext;
 import com.xxl.job.core.context.XxlJobHelper;
 import com.xxl.job.core.handler.annotation.XxlJob;
 import lombok.extern.slf4j.Slf4j;
@@ -80,18 +81,23 @@ public class EsReindexByBusinessJob {
         wrapper.orderByAsc(OrderEntity::getGmtCreate);
 
         while (true) {
-            Page<OrderEntity> page = orderRepository.page(
-                    new Page<>(pageNo, batchSize), wrapper);
+            BusinessContext.setAll(businessType, null, null);
+            try {
+                Page<OrderEntity> page = orderRepository.page(
+                        new Page<>(pageNo, batchSize), wrapper);
 
-            if (page.getRecords().isEmpty()) break;
+                if (page.getRecords().isEmpty()) break;
 
-            syncService.syncOrdersBulk(page.getRecords());
-            total += page.getRecords().size();
-            log.info("重建进度: businessType={}, {}/{}",
-                    businessType, total, page.getTotal());
+                syncService.syncOrdersBulk(page.getRecords());
+                total += page.getRecords().size();
+                log.info("重建进度: businessType={}, {}/{}",
+                        businessType, total, page.getTotal());
 
-            if (pageNo >= page.getPages()) break;
-            pageNo++;
+                if (pageNo >= page.getPages()) break;
+                pageNo++;
+            } finally {
+                BusinessContext.clear();
+            }
         }
 
         long cost = System.currentTimeMillis() - startTime;

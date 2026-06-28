@@ -25,33 +25,33 @@ public class OrderEventPublisher {
     } */
 
     /** 订单创建 */
-    public void orderCreated(String orderNo, String buyerId, OrderStatus status) {
-        publish("ORDER_CREATED", new OrderEvent(orderNo, buyerId, status, null, LocalDateTime.now()));
+    public void orderCreated(String orderNo, String buyerId, OrderStatus status, String businessType) {
+        publish("ORDER_CREATED", new OrderEvent(orderNo, buyerId, status, null, LocalDateTime.now(), businessType));
     }
 
     /** 订单支付成功 */
-    public void orderPaid(String orderNo, String buyerId, String transactionId) {
-        publish("ORDER_PAID", new OrderEvent(orderNo, buyerId, OrderStatus.PAID, transactionId, LocalDateTime.now()));
+    public void orderPaid(String orderNo, String buyerId, String transactionId, String businessType) {
+        publish("ORDER_PAID", new OrderEvent(orderNo, buyerId, OrderStatus.PAID, transactionId, LocalDateTime.now(), businessType));
     }
 
     /** 订单发货 */
-    public void orderShipped(String orderNo, String logisticsNo) {
-        publish("ORDER_SHIPPED", new OrderEvent(orderNo, null, OrderStatus.SHIPPED, logisticsNo, LocalDateTime.now()));
+    public void orderShipped(String orderNo, String logisticsNo, String businessType) {
+        publish("ORDER_SHIPPED", new OrderEvent(orderNo, null, OrderStatus.SHIPPED, logisticsNo, LocalDateTime.now(), businessType));
     }
 
     /** 订单完成 */
-    public void orderCompleted(String orderNo) {
-        publish("ORDER_COMPLETED", new OrderEvent(orderNo, null, OrderStatus.COMPLETED, null, LocalDateTime.now()));
+    public void orderCompleted(String orderNo, String businessType) {
+        publish("ORDER_COMPLETED", new OrderEvent(orderNo, null, OrderStatus.COMPLETED, null, LocalDateTime.now(), businessType));
     }
 
     /** 订单取消 */
-    public void orderCancelled(String orderNo, String reason) {
-        publish("ORDER_CANCELLED", new OrderEvent(orderNo, null, OrderStatus.CANCELLED, reason, LocalDateTime.now()));
+    public void orderCancelled(String orderNo, String reason, String businessType) {
+        publish("ORDER_CANCELLED", new OrderEvent(orderNo, null, OrderStatus.CANCELLED, reason, LocalDateTime.now(), businessType));
     }
 
     /** 订单挂起（风控） */
-    public void orderHeld(String orderNo, String reason) {
-        publish("ORDER_HELD", new OrderEvent(orderNo, null, OrderStatus.HOLD, reason, LocalDateTime.now()));
+    public void orderHeld(String orderNo, String reason, String businessType) {
+        publish("ORDER_HELD", new OrderEvent(orderNo, null, OrderStatus.HOLD, reason, LocalDateTime.now(), businessType));
     }
 
     private void publish(String topic, OrderEvent event) {
@@ -68,6 +68,7 @@ public class OrderEventPublisher {
             String buyerId,
             OrderStatus status,
             String extra,
-            LocalDateTime occurredAt
+            LocalDateTime occurredAt,
+            String businessType
     ) {}
 }

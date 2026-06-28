@@ -122,7 +122,8 @@ public class OrderController {
         // 4. 返回订单信息
         OrderEntity entity = orderRepository.getById(orderNo);
         eventPublisher.orderCreated(orderNo, request.getBuyerId(),
-                entity != null ? entity.getStatus() : OrderStatus.PENDING_PAY);
+                entity != null ? entity.getStatus() : OrderStatus.PENDING_PAY,
+                request.getBusinessType() != null ? request.getBusinessType() : "ecommerce");
         return ApiResult.success(toDTO(entity));
     }
 
@@ -194,7 +195,7 @@ public class OrderController {
         }
 
         // 5. 发布事件
-        eventPublisher.orderCancelled(orderNo, reason);
+        eventPublisher.orderCancelled(orderNo, reason, entity.getBusinessType());
         return ApiResult.success();
     }
 
@@ -217,7 +218,7 @@ public class OrderController {
         TransitionContext ctx = TransitionContext.systemContext("买家确认收货");
         ctx.setOperatorId(entity.getBuyerId());
         stateMachineEngine.transition(orderNo, OrderStatus.SHIPPED, OrderStatus.DELIVERED, ctx);
-        eventPublisher.orderCompleted(orderNo);
+        eventPublisher.orderCompleted(orderNo, entity.getBusinessType());
         log.info("确认收货成功: orderNo={}", orderNo);
         return ApiResult.success();
     }

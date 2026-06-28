@@ -84,7 +84,7 @@ public class SeckillOrderSagaDubboService implements SeckillOrderSagaService {
     @Override
     public ApiResult<Void> publishOrderCreated(String orderNo, String buyerId, String status) {
         try {
-            eventPublisher.orderCreated(orderNo, buyerId, OrderStatus.PENDING_PAY);
+            eventPublisher.orderCreated(orderNo, buyerId, OrderStatus.PENDING_PAY, "ecommerce");
             log.info("[秒杀Saga] 已发布订单创建事件: orderNo={}", orderNo);
         } catch (Exception e) {
             log.warn("[秒杀Saga] 发布事件异常（不影响主流程）: {}", e.getMessage());

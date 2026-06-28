@@ -25,7 +25,7 @@ public class OrderEsSyncConsumer {
     public class OrderCreatedListener implements RocketMQListener<OrderEvent> {
         @Override
         public void onMessage(OrderEvent event) {
-            syncService.syncOrder(event.orderNo());
+            syncService.syncOrder(event.orderNo(), event.businessType());
         }
     }
 
@@ -34,7 +34,7 @@ public class OrderEsSyncConsumer {
     public class OrderPaidListener implements RocketMQListener<OrderEvent> {
         @Override
         public void onMessage(OrderEvent event) {
-            syncService.syncOrder(event.orderNo());
+            syncService.syncOrder(event.orderNo(), event.businessType());
         }
     }
 
@@ -43,7 +43,7 @@ public class OrderEsSyncConsumer {
     public class OrderShippedListener implements RocketMQListener<OrderEvent> {
         @Override
         public void onMessage(OrderEvent event) {
-            syncService.syncOrder(event.orderNo());
+            syncService.syncOrder(event.orderNo(), event.businessType());
         }
     }
 
@@ -52,7 +52,7 @@ public class OrderEsSyncConsumer {
     public class OrderCompletedListener implements RocketMQListener<OrderEvent> {
         @Override
         public void onMessage(OrderEvent event) {
-            syncService.syncOrder(event.orderNo());
+            syncService.syncOrder(event.orderNo(), event.businessType());
         }
     }
 
@@ -61,7 +61,7 @@ public class OrderEsSyncConsumer {
     public class OrderCancelledListener implements RocketMQListener<OrderEvent> {
         @Override
         public void onMessage(OrderEvent event) {
-            syncService.syncOrder(event.orderNo());
+            syncService.syncOrder(event.orderNo(), event.businessType());
         }
     }
 
@@ -70,7 +70,7 @@ public class OrderEsSyncConsumer {
     public class OrderHeldListener implements RocketMQListener<OrderEvent> {
         @Override
         public void onMessage(OrderEvent event) {
-            syncService.syncOrder(event.orderNo());
+            syncService.syncOrder(event.orderNo(), event.businessType());
         }
     }
 }
